@@ -1,0 +1,225 @@
+<?php
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class LLM_Prompts_Ajax
+{
+
+    public function __construct()
+    {
+        add_action('wp_ajax_filter_prompts', array($this, 'filter_prompts'));
+        add_action('wp_ajax_nopriv_filter_prompts', array($this, 'filter_prompts'));
+        add_action('wp_ajax_load_more_prompts', array($this, 'load_more_prompts'));
+        add_action('wp_ajax_nopriv_load_more_prompts', array($this, 'load_more_prompts'));
+        add_action('wp_ajax_verify_access_code', array($this, 'verify_access_code'));
+        add_action('wp_ajax_nopriv_verify_access_code', array($this, 'verify_access_code'));
+    }
+
+    public function verify_access_code()
+    {
+        if (!wp_verify_nonce($_POST['nonce'], 'llm_prompts_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => 'You must be logged in to WordPress'));
+            return;
+        }
+
+        $entered_code = sanitize_text_field($_POST['access_code']);
+        $saved_code = get_option('llm_dashboard_password', '');
+
+        if (empty($saved_code)) {
+            wp_send_json_error(array('message' => 'No access code set in admin'));
+            return;
+        }
+
+        if ($entered_code === $saved_code) {
+            setcookie('llm_code_verified', wp_hash($saved_code . get_current_user_id()), time() + (24 * 60 * 60), COOKIEPATH, COOKIE_DOMAIN);
+            wp_send_json_success(array('message' => 'Access code verified'));
+        } else {
+            wp_send_json_error(array('message' => 'Invalid access code'));
+        }
+    }
+
+    public function filter_prompts()
+    {
+        if (!wp_verify_nonce($_POST['nonce'], 'llm_prompts_nonce')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+
+        if (!is_user_logged_in()) {
+            wp_send_json_error(array('message' => 'You must be logged in'));
+            return;
+        }
+
+        $library = sanitize_text_field($_POST['library']);
+        $search = sanitize_text_field($_POST['search']);
+        $sort = sanitize_text_field($_POST['sort']);
+        $video_only = $_POST['video_only'] === 'true';
+        $topics = isset($_POST['topics']) ? array_map('intval', $_POST['topics']) : array();
+        $tags = isset($_POST['tags']) ? array_map('intval', $_POST['tags']) : array();
+        $page = intval($_POST['page']);
+        $per_page = 10;
+
+        $args = array(
+            'post_type' => 'llm_prompt',
+            'posts_per_page' => $per_page,
+            'paged' => $page,
+            'post_status' => 'publish'
+        );
+
+        if (!empty($search)) {
+            $args['s'] = $search;
+        }
+
+        $tax_query = array();
+
+        if (!empty($library)) {
+            $tax_query[] = array(
+                'taxonomy' => 'llm_library',
+                'field' => 'term_id',
+                'terms' => $library
+            );
+        }
+
+        if (!empty($topics)) {
+            $tax_query[] = array(
+                'taxonomy' => 'llm_topic',
+                'field' => 'term_id',
+                'terms' => $topics,
+                'operator' => 'IN'
+            );
+        }
+
+        if (!empty($tags)) {
+            $tax_query[] = array(
+                'taxonomy' => 'llm_tag',
+                'field' => 'term_id',
+                'terms' => $tags,
+                'operator' => 'IN'
+            );
+        }
+
+        if (count($tax_query) > 1) {
+            $tax_query['relation'] = 'AND';
+        }
+
+        if (!empty($tax_query)) {
+            $args['tax_query'] = $tax_query;
+        }
+
+        if ($video_only) {
+            $args['meta_query'] = array(
+                array(
+                    'key' => '_llm_tutorial_video',
+                    'value' => '',
+                    'compare' => '!='
+                )
+            );
+        }
+
+        switch ($sort) {
+            case 'oldest':
+                $args['orderby'] = 'date';
+                $args['order'] = 'ASC';
+                break;
+            case 'name_asc':
+                $args['orderby'] = 'title';
+                $args['order'] = 'ASC';
+                break;
+            case 'name_desc':
+                $args['orderby'] = 'title';
+                $args['order'] = 'DESC';
+                break;
+            default:
+                $args['orderby'] = 'date';
+                $args['order'] = 'DESC';
+                break;
+        }
+
+        $prompts = new WP_Query($args);
+
+        ob_start();
+        if ($prompts->have_posts()) {
+            while ($prompts->have_posts()) {
+                $prompts->the_post();
+                $this->render_prompt_card(get_post());
+            }
+        }
+        $html = ob_get_clean();
+
+        wp_reset_postdata();
+
+        wp_send_json_success(array(
+            'html' => $html,
+            'found_posts' => $prompts->found_posts,
+            'max_num_pages' => $prompts->max_num_pages,
+            'current_page' => $page
+        ));
+    }
+
+    public function load_more_prompts()
+    {
+        $this->filter_prompts();
+    }
+
+    private function render_prompt_card($post)
+    {
+        $short_description = get_post_meta($post->ID, '_llm_short_description', true);
+        $tutorial_video = get_post_meta($post->ID, '_llm_tutorial_video', true);
+        $topics = get_the_terms($post->ID, 'llm_topic');
+        $tags = get_the_terms($post->ID, 'llm_tag');
+        $featured_image = get_the_post_thumbnail_url($post->ID, 'medium');
+
+        $topic_colors = array('#8B5CF6', '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#EC4899');
+        $tag_colors = array('#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981');
+        ?>
+        <div class="llm-prompt-card" data-post-id="<?php echo $post->ID; ?>"
+            data-has-video="<?php echo !empty($tutorial_video) ? '1' : '0'; ?>">
+            <div class="card-top">
+                <?php if ($featured_image): ?>
+                    <div class="llm-prompt-image">
+                        <img src="<?php echo $featured_image; ?>" alt="<?php echo get_the_title($post); ?>">
+                    </div>
+                <?php endif; ?>
+                <div class="card-heading">
+                    <div class="llm-prompt-tags">
+                        <?php if ($topics): ?>
+                            <?php foreach ($topics as $index => $topic): ?>
+                                <span class="llm-topic-tag" data-topic-id="<?php echo $topic->term_id; ?>"
+                                    style="background-color: <?php echo $topic_colors[$index % count($topic_colors)]; ?>;"><?php echo $topic->name; ?></span>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+
+                        <?php if ($tags): ?>
+                            <?php foreach ($tags as $index => $tag): ?>
+                                <span class="llm-tag-tag" data-tag-id="<?php echo $tag->term_id; ?>"
+                                    style="background-color: <?php echo $tag_colors[$index % count($tag_colors)]; ?>;"><?php echo $tag->name; ?></span>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                    <h3 class="llm-prompt-title"><?php echo get_the_title($post); ?></h3>
+                </div>
+            </div>
+            <div class="card-detail">
+                <?php if ($short_description): ?>
+                    <p class="llm-prompt-description"><?php echo esc_html($short_description); ?></p>
+                <?php endif; ?>
+                <a href="<?php echo get_permalink($post); ?>" target="_blank" rel="noopener noreferrer"
+                    class="llm-prompt-arrow">
+                    <svg width="31" height="31" viewBox="0 0 31 31" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="0.599609" y="0.100098" width="30.4" height="30.4" rx="5.13" fill="black"></rect>
+                        <path d="M8.95898 15.3002H22.639M22.639 15.3002L17.509 10.1702M22.639 15.3002L17.509 20.4302"
+                            stroke="white" stroke-width="1.2825" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                </a>
+            </div>
+        </div>
+        <?php
+    }
+}
