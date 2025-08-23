@@ -16,14 +16,25 @@ class LLM_Prompts_Frontend
     {
         wp_enqueue_style('llm-prompts-style', LLM_PROMPTS_URL . 'assets/style.css', array(), '1.0.18');
         wp_enqueue_script('llm-prompts-script', LLM_PROMPTS_URL . 'assets/script.js', array('jquery'), '1.0.18', true);
+        $premium_libraries = LLM_Prompts_Plugin::get_premium_libraries();
+        $premium_library_ids = array_map(function($lib) { return $lib->term_id; }, $premium_libraries);
+
         wp_localize_script('llm-prompts-script', 'llm_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('llm_prompts_nonce'),
-            'logout_url' => wp_logout_url(get_permalink())
+            'logout_url' => wp_logout_url(get_permalink()),
+            'premium_libraries' => $premium_library_ids
         ));
 
         if (!is_user_logged_in()) {
             return $this->render_wordpress_login();
+        }
+
+        $current_user_id = get_current_user_id();
+        $user = wp_get_current_user();
+
+        if (user_can($user, 'academy_student') && LLM_Prompts_Plugin::is_special_offer_student($current_user_id)) {
+            return $this->render_dashboard();
         }
 
         $saved_code = get_option('llm_dashboard_password', '');
@@ -52,12 +63,24 @@ class LLM_Prompts_Frontend
 
     private function render_code_form()
     {
+        $user = wp_get_current_user();
+        $is_academy_student = user_can($user, 'academy_student');
+        $is_special_student = $is_academy_student && LLM_Prompts_Plugin::is_special_offer_student(get_current_user_id());
+        
         ob_start();
         ?>
         <div class="llm-login-container">
             <div class="llm-login-form">
                 <h2>LLM Prompts Dashboard</h2>
-                <p>Welcome, <?php echo wp_get_current_user()->display_name; ?>! Please enter the access code.</p>
+                <p>Welcome, <?php echo wp_get_current_user()->display_name; ?>!</p>
+                
+                <?php if ($is_academy_student && !$is_special_student): ?>
+                    <div class="llm-info-box" style="background: #e3f2fd; border: 1px solid #2196f3; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <h3 style="margin: 0 0 10px 0; color: #1976d2;">Academy Student</h3>
+                        <p style="margin: 0; color: #555;">You're an Academy student, but not eligible for the special offer. Please enter the access code to continue.</p>
+                    </div>
+                <?php endif; ?>
+                
                 <form method="post">
                     <input type="text" name="llm_access_code" placeholder="Access Code" required>
                     <button type="submit">Access Dashboard</button>
@@ -85,8 +108,13 @@ class LLM_Prompts_Frontend
                     <label>Select library</label>
                     <select id="llm-library-filter">
                         <option value="">All Libraries</option>
-                        <?php foreach ($libraries as $library): ?>
-                            <option value="<?php echo $library->term_id; ?>"><?php echo $library->name; ?></option>
+                        <?php foreach ($libraries as $library): 
+                            $is_premium = LLM_Prompts_Plugin::is_premium_library($library->term_id);
+                            ?>
+                            <option value="<?php echo $library->term_id; ?>" data-premium="<?php echo $is_premium ? '1' : '0'; ?>">
+                                <?php echo $library->name; ?>
+                                <?php if ($is_premium): ?> 🔒<?php endif; ?>
+                            </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -174,6 +202,18 @@ class LLM_Prompts_Frontend
             <div class="llm-content">
                 <div class="llm-header">
                     <h1>LLM Prompts</h1>
+                    <?php 
+                    $current_user_id = get_current_user_id();
+                    $user = wp_get_current_user();
+                    $is_special_student = user_can($user, 'academy_student') && LLM_Prompts_Plugin::is_special_offer_student($current_user_id);
+                    
+                    if ($is_special_student): ?>
+                        <div class="llm-special-banner" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+                            <h3 style="margin: 0 0 8px 0; font-size: 18px;">🎉 Special Offer Student</h3>
+                            <p style="margin: 0; font-size: 14px; opacity: 0.9;">Congratulations! You have special access to the LLM Dashboard as part of our Academy program.</p>
+                        </div>
+                    <?php endif; ?>
+                    
                     <p>A library of ready-to-use prompts for ChatGPT and other language models. They'll help you write better,
                         solve problems faster, and get more done.</p>
                     <p><strong>Not sure where to start? Try filtering by tag for 'Staff Pick' or 'Popular' to find our
@@ -190,6 +230,37 @@ class LLM_Prompts_Frontend
 
                 <div id="llm-no-results" class="llm-no-results" style="display:none;">
                     No items found.
+                </div>
+
+                <div id="llm-premium-overlay" class="llm-premium-overlay" style="display:none;">
+                    <div class="llm-premium-content">
+                        <div class="llm-premium-header">
+                            <h2><?php echo esc_html(get_option('llm_premium_title', '🔒 Premium Library')); ?></h2>
+                        </div>
+                        
+                        <div class="llm-premium-message">
+                            <?php 
+                            $premium_message = get_option('llm_premium_message', "⭐ Coming Soon!\n\nThis premium library is currently under development and will be available soon with exclusive high-quality prompts.");
+                            echo nl2br(esc_html($premium_message)); 
+                            ?>
+                        </div>
+
+                        <div class="llm-premium-actions">
+                            <?php 
+                            $button_url = get_option('llm_premium_button_url', '#');
+                            $button_text = get_option('llm_premium_button_text', '🚀 Get Premium Access');
+                            
+                            if ($button_url && $button_url !== '#'): ?>
+                                <a href="<?php echo esc_url($button_url); ?>" class="llm-premium-button" target="_blank">
+                                    <?php echo esc_html($button_text); ?>
+                                </a>
+                            <?php endif; ?>
+                            
+                            <button id="llm-back-to-dashboard" class="llm-back-button">
+                                ← Back to Dashboard
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

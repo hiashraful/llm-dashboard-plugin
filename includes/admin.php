@@ -15,7 +15,13 @@ class LLM_Prompts_Admin
         add_action('admin_post_save_password', array($this, 'save_password'));
         add_action('admin_post_export_prompts', array($this, 'export_prompts'));
         add_action('admin_post_import_prompts', array($this, 'import_prompts'));
+        add_action('admin_post_save_special_offer', array($this, 'save_special_offer'));
+        add_action('admin_post_save_premium_libraries', array($this, 'save_premium_libraries'));
         add_action('init', array($this, 'add_elementor_support'));
+        add_filter('manage_users_columns', array($this, 'add_user_columns'));
+        add_filter('manage_users_custom_column', array($this, 'show_user_columns'), 10, 3);
+        add_action('restrict_manage_users', array($this, 'add_user_filters'));
+        add_filter('pre_get_users', array($this, 'filter_users_by_special_offer'));
     }
 
     public function add_elementor_support()
@@ -100,6 +106,24 @@ class LLM_Prompts_Admin
             'Tags',
             'manage_options',
             'edit-tags.php?taxonomy=llm_tag&post_type=llm_prompt'
+        );
+
+        add_submenu_page(
+            'llm-dashboard-admin',
+            'Special Offer',
+            'Special Offer',
+            'manage_options',
+            'llm-special-offer',
+            array($this, 'special_offer_page')
+        );
+
+        add_submenu_page(
+            'llm-dashboard-admin',
+            'Premium Libraries',
+            'Premium Libraries',
+            'manage_options',
+            'llm-premium-libraries',
+            array($this, 'premium_libraries_page')
         );
     }
 
@@ -729,5 +753,346 @@ class LLM_Prompts_Admin
             $prompts = array_filter($prompts);
             update_post_meta($post_id, '_llm_multiple_prompts', $prompts);
         }
+    }
+
+    public function special_offer_page()
+    {
+        $offer_date = get_option('llm_special_offer_date', '');
+        $offer_limit = get_option('llm_special_offer_limit', 50);
+        $offer_status = get_option('llm_special_offer_status', 'inactive');
+
+        if (isset($_GET['updated']) && $_GET['updated'] == 'true') {
+            echo '<div class="notice notice-success"><p>Special offer settings updated successfully!</p></div>';
+        }
+
+        $special_students = $this->get_special_offer_students();
+        $special_count = count($special_students);
+
+        ?>
+        <div class="wrap">
+            <h1>Special Offer Settings</h1>
+            
+            <div class="llm-special-offer-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                <div class="llm-offer-settings">
+                    <h2>Offer Configuration</h2>
+                    <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+                        <input type="hidden" name="action" value="save_special_offer">
+                        <?php wp_nonce_field('llm_special_offer_nonce'); ?>
+
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">Offer Status</th>
+                                <td>
+                                    <select name="offer_status">
+                                        <option value="inactive" <?php selected($offer_status, 'inactive'); ?>>Inactive</option>
+                                        <option value="active" <?php selected($offer_status, 'active'); ?>>Active</option>
+                                    </select>
+                                    <p class="description">Enable or disable the special offer program.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Start Date</th>
+                                <td>
+                                    <input type="date" name="offer_date" value="<?php echo esc_attr($offer_date); ?>" class="regular-text" />
+                                    <p class="description">Students registered after this date are eligible.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Number of Students</th>
+                                <td>
+                                    <input type="number" name="offer_limit" value="<?php echo esc_attr($offer_limit); ?>" min="1" max="1000" class="regular-text" />
+                                    <p class="description">Maximum number of students who will receive the special offer.</p>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <?php submit_button('Save Settings'); ?>
+                    </form>
+                </div>
+
+                <div class="llm-offer-status">
+                    <h2>Offer Status</h2>
+                    <div class="llm-status-cards" style="margin-bottom: 20px;">
+                        <div class="llm-status-card" style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                            <h3 style="margin: 0 0 10px 0;">Current Status</h3>
+                            <p style="margin: 0; font-size: 16px; color: <?php echo $offer_status === 'active' ? '#10B981' : '#EF4444'; ?>;">
+                                <?php echo ucfirst($offer_status); ?>
+                            </p>
+                        </div>
+                        <div class="llm-status-card" style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                            <h3 style="margin: 0 0 10px 0;">Special Students</h3>
+                            <p style="margin: 0; font-size: 16px;">
+                                <?php echo $special_count; ?> / <?php echo $offer_limit; ?> assigned
+                            </p>
+                            <div style="background: #e5e7eb; height: 8px; border-radius: 4px; margin-top: 8px;">
+                                <div style="background: #3B82F6; height: 100%; width: <?php echo min(100, ($special_count / max(1, $offer_limit)) * 100); ?>%; border-radius: 4px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <?php if (!empty($special_students)): ?>
+                        <h3>Special Offer Students</h3>
+                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px;">
+                            <table class="widefat fixed striped">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">ID</th>
+                                        <th>Email</th>
+                                        <th>Registered</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($special_students as $student): ?>
+                                        <tr>
+                                            <td><?php echo $student->ID; ?></td>
+                                            <td><?php echo esc_html($student->user_email); ?></td>
+                                            <td><?php echo date('M j, Y', strtotime($student->user_registered)); ?></td>
+                                            <td><span style="background: #10B981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">Special</span></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+
+    public function save_special_offer()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'llm_special_offer_nonce')) {
+            wp_die('Unauthorized');
+        }
+
+        $offer_date = sanitize_text_field($_POST['offer_date']);
+        $offer_limit = intval($_POST['offer_limit']);
+        $offer_status = sanitize_text_field($_POST['offer_status']);
+
+        update_option('llm_special_offer_date', $offer_date);
+        update_option('llm_special_offer_limit', $offer_limit);
+        update_option('llm_special_offer_status', $offer_status);
+
+        wp_redirect(admin_url('admin.php?page=llm-special-offer&updated=true'));
+        exit;
+    }
+
+    private function get_special_offer_students()
+    {
+        $args = array(
+            'meta_query' => array(
+                array(
+                    'key'     => '_llm_special_offer_student',
+                    'value'   => 'yes',
+                    'compare' => '='
+                )
+            ),
+            'fields' => 'all'
+        );
+
+        return get_users($args);
+    }
+
+    public function add_user_columns($columns)
+    {
+        $columns['special_offer'] = 'Special Offer';
+        return $columns;
+    }
+
+    public function show_user_columns($value, $column_name, $user_id)
+    {
+        if ($column_name == 'special_offer') {
+            $is_special = get_user_meta($user_id, '_llm_special_offer_student', true) === 'yes';
+            $user = get_userdata($user_id);
+            $is_academy_student = $user && user_can($user, 'academy_student');
+            
+            if ($is_special && $is_academy_student) {
+                return '<span style="background: #10B981; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">SPECIAL</span>';
+            } elseif ($is_academy_student) {
+                return '<span style="background: #3B82F6; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">STUDENT</span>';
+            }
+            return '-';
+        }
+        return $value;
+    }
+
+    public function add_user_filters()
+    {
+        $filter_value = isset($_GET['special_offer_filter']) ? $_GET['special_offer_filter'] : '';
+        ?>
+        <select name="special_offer_filter">
+            <option value="">All Users</option>
+            <option value="special" <?php selected($filter_value, 'special'); ?>>Special Offer Students</option>
+            <option value="academy" <?php selected($filter_value, 'academy'); ?>>Academy Students</option>
+        </select>
+        <?php
+    }
+
+    public function filter_users_by_special_offer($query)
+    {
+        global $pagenow;
+        
+        if (is_admin() && $pagenow == 'users.php' && isset($_GET['special_offer_filter']) && !empty($_GET['special_offer_filter'])) {
+            $filter = $_GET['special_offer_filter'];
+            
+            if ($filter === 'special') {
+                $query->set('meta_key', '_llm_special_offer_student');
+                $query->set('meta_value', 'yes');
+            } elseif ($filter === 'academy') {
+                $query->set('meta_key', 'wp_capabilities');
+                $query->set('meta_value', 'academy_student');
+                $query->set('meta_compare', 'LIKE');
+            }
+        }
+    }
+
+    public function premium_libraries_page()
+    {
+        $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+
+        if (isset($_GET['updated']) && $_GET['updated'] == 'true') {
+            echo '<div class="notice notice-success"><p>Premium library settings updated successfully!</p></div>';
+        }
+
+        ?>
+        <div class="wrap">
+            <h1>Premium Libraries Management</h1>
+            <p>Configure which libraries require premium access. Premium libraries will show a "Coming Soon" message to non-premium users.</p>
+            
+            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+                <input type="hidden" name="action" value="save_premium_libraries">
+                <?php wp_nonce_field('llm_premium_libraries_nonce'); ?>
+
+                <div class="llm-premium-libraries-grid" style="display: grid; gap: 20px; margin-top: 20px;">
+                    <?php if (!empty($libraries)): ?>
+                        <div class="llm-libraries-section">
+                            <h2>Library Settings</h2>
+                            <table class="widefat fixed striped">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">Premium</th>
+                                        <th>Library Name</th>
+                                        <th style="width: 80px;">Prompts</th>
+                                        <th style="width: 100px;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($libraries as $library): 
+                                        $is_premium = get_term_meta($library->term_id, '_llm_premium_library', true) === 'yes';
+                                        ?>
+                                        <tr>
+                                            <td style="text-align: center;">
+                                                <label>
+                                                    <input type="checkbox" 
+                                                           name="premium_libraries[]" 
+                                                           value="<?php echo $library->term_id; ?>"
+                                                           <?php checked($is_premium); ?>>
+                                                </label>
+                                            </td>
+                                            <td>
+                                                <strong><?php echo esc_html($library->name); ?></strong>
+                                                <?php if ($library->description): ?>
+                                                    <div style="color: #666; font-size: 12px; margin-top: 2px;">
+                                                        <?php echo esc_html($library->description); ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?php echo $library->count; ?> prompts</td>
+                                            <td>
+                                                <?php if ($is_premium): ?>
+                                                    <span style="background: #F59E0B; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">PREMIUM</span>
+                                                <?php else: ?>
+                                                    <span style="background: #10B981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">FREE</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="notice notice-info">
+                            <p>No libraries found. Please create some libraries first.</p>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="llm-premium-settings">
+                        <h2>Premium Message Settings</h2>
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">Coming Soon Title</th>
+                                <td>
+                                    <input type="text" 
+                                           name="premium_title" 
+                                           value="<?php echo esc_attr(get_option('llm_premium_title', '🔒 Premium Library')); ?>" 
+                                           class="regular-text" />
+                                    <p class="description">Title shown on premium library pages.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Coming Soon Message</th>
+                                <td>
+                                    <textarea name="premium_message" 
+                                              rows="4" 
+                                              class="large-text"><?php echo esc_textarea(get_option('llm_premium_message', "⭐ Coming Soon!\n\nThis premium library is currently under development and will be available soon with exclusive high-quality prompts.")); ?></textarea>
+                                    <p class="description">Message shown to users when they select a premium library.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Upgrade Button Text</th>
+                                <td>
+                                    <input type="text" 
+                                           name="premium_button_text" 
+                                           value="<?php echo esc_attr(get_option('llm_premium_button_text', '🚀 Get Premium Access')); ?>" 
+                                           class="regular-text" />
+                                    <p class="description">Text for the premium upgrade button.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Upgrade Button URL</th>
+                                <td>
+                                    <input type="url" 
+                                           name="premium_button_url" 
+                                           value="<?php echo esc_url(get_option('llm_premium_button_url', '#')); ?>" 
+                                           class="regular-text" />
+                                    <p class="description">URL where users go to upgrade to premium (leave # to hide button).</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <?php submit_button('Save Premium Settings'); ?>
+            </form>
+        </div>
+        <?php
+    }
+
+    public function save_premium_libraries()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'llm_premium_libraries_nonce')) {
+            wp_die('Unauthorized');
+        }
+
+        $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+        $premium_libraries = isset($_POST['premium_libraries']) ? $_POST['premium_libraries'] : array();
+
+        foreach ($libraries as $library) {
+            if (in_array($library->term_id, $premium_libraries)) {
+                update_term_meta($library->term_id, '_llm_premium_library', 'yes');
+            } else {
+                delete_term_meta($library->term_id, '_llm_premium_library');
+            }
+        }
+
+        update_option('llm_premium_title', sanitize_text_field($_POST['premium_title']));
+        update_option('llm_premium_message', sanitize_textarea_field($_POST['premium_message']));
+        update_option('llm_premium_button_text', sanitize_text_field($_POST['premium_button_text']));
+        update_option('llm_premium_button_url', esc_url_raw($_POST['premium_button_url']));
+
+        wp_redirect(admin_url('admin.php?page=llm-premium-libraries&updated=true'));
+        exit;
     }
 }

@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: LLM Prompts Dashboard
+ * Plugin Name: ACLAS Knowledge Hub
  * Plugin URI: https://www.devash.pro/
  * Description: A library of ready-to-use prompts for ChatGPT and other LLMs
- * Version: 1.0.29
+ * Version: 1.1.2
  * Author: Dev Ash
  * Author URI: https://www.devash.pro/
  */
@@ -25,6 +25,8 @@ class LLM_Prompts_Plugin
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_filter('single_template', array($this, 'load_single_template'));
         add_filter('template_include', array($this, 'override_elementor_template'), 99);
+        add_action('user_register', array($this, 'handle_new_user_registration'));
+        add_action('set_user_role', array($this, 'handle_user_role_change'), 10, 3);
         register_activation_hook(__FILE__, array($this, 'activate'));
     }
 
@@ -165,6 +167,90 @@ class LLM_Prompts_Plugin
             }
         }
         return $template;
+    }
+
+    public function handle_new_user_registration($user_id)
+    {
+        $user = get_userdata($user_id);
+        
+        if ($user && user_can($user, 'academy_student')) {
+            $this->check_special_offer_eligibility($user_id);
+        }
+    }
+
+    public function handle_user_role_change($user_id, $new_role, $old_roles)
+    {
+        if ($new_role === 'academy_student') {
+            $this->check_special_offer_eligibility($user_id);
+        }
+    }
+
+    private function check_special_offer_eligibility($user_id)
+    {
+        $offer_status = get_option('llm_special_offer_status', 'inactive');
+        $offer_date = get_option('llm_special_offer_date', '');
+        $offer_limit = get_option('llm_special_offer_limit', 50);
+
+        if ($offer_status !== 'active' || empty($offer_date)) {
+            return;
+        }
+
+        $user = get_userdata($user_id);
+        if (!$user) {
+            return;
+        }
+
+        $registration_date = strtotime($user->user_registered);
+        $cutoff_date = strtotime($offer_date);
+
+        if ($registration_date <= $cutoff_date) {
+            return;
+        }
+
+        $current_special_students = get_users(array(
+            'meta_query' => array(
+                array(
+                    'key'     => '_llm_special_offer_student',
+                    'value'   => 'yes',
+                    'compare' => '='
+                )
+            ),
+            'fields' => 'ID',
+            'count_total' => true
+        ));
+
+        if (count($current_special_students) >= $offer_limit) {
+            return;
+        }
+
+        update_user_meta($user_id, '_llm_special_offer_student', 'yes');
+        update_user_meta($user_id, '_llm_special_offer_date', current_time('mysql'));
+
+        do_action('llm_special_offer_assigned', $user_id);
+    }
+
+    public static function is_special_offer_student($user_id)
+    {
+        return get_user_meta($user_id, '_llm_special_offer_student', true) === 'yes';
+    }
+
+    public static function is_premium_library($library_id)
+    {
+        return get_term_meta($library_id, '_llm_premium_library', true) === 'yes';
+    }
+
+    public static function get_premium_libraries()
+    {
+        $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+        $premium_libraries = array();
+        
+        foreach ($libraries as $library) {
+            if (self::is_premium_library($library->term_id)) {
+                $premium_libraries[] = $library;
+            }
+        }
+        
+        return $premium_libraries;
     }
 }
 

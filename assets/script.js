@@ -135,6 +135,20 @@ jQuery(document).ready(function($) {
     }
     
     $('#llm-library-filter, #llm-sort-filter').on('change', function() {
+        // Check if selected library is premium
+        if ($(this).attr('id') === 'llm-library-filter') {
+            const selectedValue = $(this).val();
+            const selectedOption = $(this).find('option:selected');
+            const isPremium = selectedOption.data('premium') === 1;
+            
+            if (selectedValue && isPremium) {
+                showPremiumOverlay();
+                return;
+            } else {
+                hidePremiumOverlay();
+            }
+        }
+        
         filterPrompts();
     });
     
@@ -175,4 +189,24 @@ jQuery(document).ready(function($) {
     }
     
     initializeScrollableContainers();
+    
+    // Premium library functions
+    function showPremiumOverlay() {
+        $('#llm-prompts-feed').hide();
+        $('#llm-load-more-container').hide();
+        $('#llm-no-results').hide();
+        $('#llm-premium-overlay').show();
+    }
+    
+    function hidePremiumOverlay() {
+        $('#llm-premium-overlay').hide();
+        $('#llm-prompts-feed').show();
+        $('#llm-load-more-container').show();
+    }
+    
+    // Back to dashboard button
+    $('#llm-back-to-dashboard').on('click', function() {
+        $('#llm-library-filter').val('').trigger('change');
+        hidePremiumOverlay();
+    });
 });
