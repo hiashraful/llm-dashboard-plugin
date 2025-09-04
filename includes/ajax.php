@@ -85,6 +85,18 @@ class LLM_Prompts_Ajax
                 'field' => 'term_id',
                 'terms' => $library
             );
+        } else {
+            // Exclude premium libraries when no specific library is selected
+            $premium_libraries = LLM_Prompts_Plugin::get_premium_libraries();
+            if (!empty($premium_libraries)) {
+                $premium_library_ids = array_map(function($lib) { return $lib->term_id; }, $premium_libraries);
+                $tax_query[] = array(
+                    'taxonomy' => 'llm_library',
+                    'field' => 'term_id',
+                    'terms' => $premium_library_ids,
+                    'operator' => 'NOT IN'
+                );
+            }
         }
 
         if (!empty($topics)) {
@@ -188,34 +200,44 @@ class LLM_Prompts_Ajax
                     </div>
                 <?php endif; ?>
                 <div class="card-heading">
-                    <div class="llm-prompt-tags">
-                        <?php if ($topics): ?>
-                            <?php foreach ($topics as $index => $topic): ?>
-                                <span class="llm-topic-tag" data-topic-id="<?php echo $topic->term_id; ?>"
-                                    style="background-color: <?php echo $topic_colors[$index % count($topic_colors)]; ?>;"><?php echo $topic->name; ?></span>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-
-                        <?php if ($tags): ?>
-                            <?php foreach ($tags as $index => $tag): ?>
-                                <span class="llm-tag-tag" data-tag-id="<?php echo $tag->term_id; ?>"
-                                    style="background-color: <?php echo $tag_colors[$index % count($tag_colors)]; ?>;"><?php echo $tag->name; ?></span>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
                     <h3 class="llm-prompt-title"><?php echo get_the_title($post); ?></h3>
+                    <?php if ($short_description): ?>
+                        <p class="llm-prompt-description"><?php echo esc_html($short_description); ?></p>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="card-detail">
-                <?php if ($short_description): ?>
-                    <p class="llm-prompt-description"><?php echo esc_html($short_description); ?></p>
-                <?php endif; ?>
+                <div class="llm-prompt-tags">
+                        <?php 
+                        $tag_count = 0;
+                        $max_tags = 10;
+                        
+                        if ($topics): ?>
+                            <?php foreach ($topics as $index => $topic): 
+                                if ($tag_count >= $max_tags) break;
+                            ?>
+                                <span class="llm-topic-tag" data-topic-id="<?php echo $topic->term_id; ?>"
+                                    style="background-color: <?php echo $topic_colors[$index % count($topic_colors)]; ?>;"><?php echo $topic->name; ?></span>
+                            <?php 
+                                $tag_count++;
+                            endforeach; ?>
+                        <?php endif; ?>
+
+                        <?php if ($tags && $tag_count < $max_tags): ?>
+                            <?php foreach ($tags as $index => $tag): 
+                                if ($tag_count >= $max_tags) break;
+                            ?>
+                                <span class="llm-tag-tag" data-tag-id="<?php echo $tag->term_id; ?>"
+                                    style="background-color: <?php echo $tag_colors[$index % count($tag_colors)]; ?>;"><?php echo $tag->name; ?></span>
+                            <?php 
+                                $tag_count++;
+                            endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 <a href="<?php echo get_permalink($post); ?>" target="_blank" rel="noopener noreferrer"
                     class="llm-prompt-arrow">
-                    <svg width="31" height="31" viewBox="0 0 31 31" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="0.599609" y="0.100098" width="30.4" height="30.4" rx="5.13" fill="black"></rect>
-                        <path d="M8.95898 15.3002H22.639M22.639 15.3002L17.509 10.1702M22.639 15.3002L17.509 20.4302"
-                            stroke="white" stroke-width="1.2825" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M7 17L17 7M9 7H17V15" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                     </svg>
                 </a>
             </div>

@@ -10,20 +10,74 @@ class LLM_Prompts_Frontend
     public function __construct()
     {
         add_shortcode('llm_prompts_dashboard', array($this, 'dashboard_shortcode'));
+        add_action('init', array($this, 'handle_access_code'));
+    }
+
+    public function handle_access_code()
+    {
+        // Only handle on dashboard page and when access code is submitted
+        if (isset($_POST['llm_access_code']) && is_user_logged_in()) {
+            $saved_code = get_option('llm_dashboard_password', '');
+            $current_user_id = get_current_user_id();
+            
+            if ($_POST['llm_access_code'] === $saved_code) {
+                $cookie_value = wp_hash($saved_code . $current_user_id);
+                $cookie_set = setcookie('llm_code_verified', $cookie_value, time() + (24 * 60 * 60), '/', '', false, true);
+                // Also set it immediately in $_COOKIE for current request
+                $_COOKIE['llm_code_verified'] = $cookie_value;
+            }
+        }
     }
 
     public function dashboard_shortcode($atts)
     {
-        wp_enqueue_style('llm-prompts-style', LLM_PROMPTS_URL . 'assets/style.css', array(), '1.0.18');
-        wp_enqueue_script('llm-prompts-script', LLM_PROMPTS_URL . 'assets/script.js', array('jquery'), '1.0.18', true);
+        
+        wp_enqueue_style('llm-prompts-style', LLM_PROMPTS_URL . 'assets/style.css', array(), '1.0.19');
+        wp_enqueue_script('llm-prompts-script', LLM_PROMPTS_URL . 'assets/script.js', array('jquery'), '1.0.19', true);
+        
+        // Get selected library from URL parameter or use default
+        $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+        $selected_library_slug = isset($_GET['library']) ? sanitize_text_field($_GET['library']) : '';
+        $selected_library = null;
+        $default_library_id = get_option('llm_default_library', '');
+        
+        // Find selected library by slug
+        if ($selected_library_slug) {
+            foreach ($libraries as $library) {
+                if ($library->slug === $selected_library_slug) {
+                    $selected_library = $library;
+                    break;
+                }
+            }
+        } elseif ($default_library_id) {
+            // Use default library if no URL parameter
+            foreach ($libraries as $library) {
+                if ($library->term_id == $default_library_id) {
+                    $selected_library = $library;
+                    break;
+                }
+            }
+        }
+        
         $premium_libraries = LLM_Prompts_Plugin::get_premium_libraries();
-        $premium_library_ids = array_map(function($lib) { return $lib->term_id; }, $premium_libraries);
+        $premium_library_ids = array_map(function ($lib) {
+            return $lib->term_id;
+        }, $premium_libraries);
+        
+        // Create library slug mapping for JavaScript
+        $library_slugs = array();
+        foreach ($libraries as $library) {
+            $library_slugs[$library->term_id] = $library->slug;
+        }
 
         wp_localize_script('llm-prompts-script', 'llm_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('llm_prompts_nonce'),
             'logout_url' => wp_logout_url(get_permalink()),
-            'premium_libraries' => $premium_library_ids
+            'premium_libraries' => $premium_library_ids,
+            'selected_library' => $selected_library ? $selected_library->term_id : '',
+            'default_library' => $default_library_id,
+            'library_slugs' => $library_slugs
         ));
 
         if (!is_user_logged_in()) {
@@ -33,11 +87,24 @@ class LLM_Prompts_Frontend
         $current_user_id = get_current_user_id();
         $user = wp_get_current_user();
 
+        // Admin bypass - allow administrators full access
+        if (user_can($user, 'manage_options')) {
+            return $this->render_dashboard();
+        }
+
         if (user_can($user, 'academy_student') && LLM_Prompts_Plugin::is_special_offer_student($current_user_id)) {
             return $this->render_dashboard();
         }
 
         $saved_code = get_option('llm_dashboard_password', '');
+        
+        // Check if user already has valid cookie (already entered code)
+        $expected_cookie = wp_hash($saved_code . $current_user_id);
+        $actual_cookie = isset($_COOKIE['llm_code_verified']) ? $_COOKIE['llm_code_verified'] : 'NOT SET';
+        
+        if (isset($_COOKIE['llm_code_verified']) && $_COOKIE['llm_code_verified'] === $expected_cookie) {
+            return $this->render_dashboard();
+        }
 
         if (isset($_POST['llm_access_code']) && $_POST['llm_access_code'] === $saved_code) {
             return $this->render_dashboard();
@@ -52,9 +119,9 @@ class LLM_Prompts_Frontend
         ?>
         <div class="llm-login-container">
             <div class="llm-login-form">
-                <h2>LLM Prompts Dashboard</h2>
-                <p>Please log in to WordPress to access the dashboard.</p>
-                <a href="<?php echo wp_login_url(get_permalink()); ?>" class="llm-wp-login-btn">Log in to WordPress</a>
+                <h2>ACLAS Knowledge Hub</h2>
+                <p>Please log in to Academy to access the knowledge hub.</p>
+                <a href="<?php echo wp_login_url(get_permalink()); ?>" class="llm-wp-login-btn">Log in to Academy</a>
             </div>
         </div>
         <?php
@@ -66,21 +133,21 @@ class LLM_Prompts_Frontend
         $user = wp_get_current_user();
         $is_academy_student = user_can($user, 'academy_student');
         $is_special_student = $is_academy_student && LLM_Prompts_Plugin::is_special_offer_student(get_current_user_id());
-        
+
         ob_start();
         ?>
         <div class="llm-login-container">
             <div class="llm-login-form">
-                <h2>LLM Prompts Dashboard</h2>
+                <h2>ACLAS Knowledge Hub</h2>
                 <p>Welcome, <?php echo wp_get_current_user()->display_name; ?>!</p>
-                
+
                 <?php if ($is_academy_student && !$is_special_student): ?>
-                    <div class="llm-info-box" style="background: #e3f2fd; border: 1px solid #2196f3; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <h3 style="margin: 0 0 10px 0; color: #1976d2;">Academy Student</h3>
-                        <p style="margin: 0; color: #555;">You're an Academy student, but not eligible for the special offer. Please enter the access code to continue.</p>
+                    <div class="llm-info-box">
+                        <h3>Academy Student</h3>
+                        <p>You're an Academy student, but not eligible for the special offer. Please enter the access code to continue.</p>
                     </div>
                 <?php endif; ?>
-                
+
                 <form method="post">
                     <input type="text" name="llm_access_code" placeholder="Access Code" required>
                     <button type="submit">Access Dashboard</button>
@@ -100,164 +167,285 @@ class LLM_Prompts_Frontend
         $topics = get_terms(array('taxonomy' => 'llm_topic', 'hide_empty' => false));
         $tags = get_terms(array('taxonomy' => 'llm_tag', 'hide_empty' => false));
 
+        // Get selected library from URL parameter or use default
+        $selected_library_slug = isset($_GET['library']) ? sanitize_text_field($_GET['library']) : '';
+        $selected_library = null;
+        $default_library_id = get_option('llm_default_library', '');
+        
+        // Find selected library by slug
+        if ($selected_library_slug) {
+            foreach ($libraries as $library) {
+                if ($library->slug === $selected_library_slug) {
+                    $selected_library = $library;
+                    break;
+                }
+            }
+        } elseif ($default_library_id) {
+            // Use default library if no URL parameter
+            foreach ($libraries as $library) {
+                if ($library->term_id == $default_library_id) {
+                    $selected_library = $library;
+                    break;
+                }
+            }
+        }
+        
+        // Check if selected library is premium and show overlay if needed
+        $show_premium_overlay = false;
+        if ($selected_library && LLM_Prompts_Plugin::is_premium_library($selected_library->term_id)) {
+            $show_premium_overlay = true;
+        }
+        
+        // Determine header title
+        $header_title = $selected_library ? $selected_library->name : 'ACLAS Knowledge Hub';
+
         ob_start();
         ?>
+        <!-- Navigation Header -->
+        <div class="llm-nav-header">
+            <div class="llm-nav-container">
+                <div class="llm-nav-item">
+                    <?php
+                    $custom_logo_url = get_option('llm_custom_logo_url', '');
+                    if ($custom_logo_url): ?>
+                        <img src="<?php echo esc_url($custom_logo_url); ?>" alt="Your Logo" class="llm-nav-logo">
+                    <?php else:
+                        $site_icon_url = get_site_icon_url();
+                        if ($site_icon_url): ?>
+                            <img src="<?php echo esc_url($site_icon_url); ?>" alt="Your Logo" class="llm-nav-logo">
+                        <?php else: ?>
+                            <span class="llm-nav-logo-text">Your Logo</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+                <div class="llm-nav-item">
+                    <?php
+                    $nav_menu_id = get_option('llm_nav_menu', '');
+                    if ($nav_menu_id && wp_get_nav_menu_object($nav_menu_id)): 
+                        wp_nav_menu(array(
+                            'menu' => $nav_menu_id,
+                            'container' => false,
+                            'menu_class' => 'llm-nav-menu',
+                            'fallback_cb' => false,
+                            'depth' => 1
+                        ));
+                    else: ?>
+                        <span>Dashboard</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
         <div class="llm-dashboard">
             <div class="llm-sidebar">
-                <div class="llm-filter-section">
-                    <label>Select library</label>
-                    <select id="llm-library-filter">
-                        <option value="">All Libraries</option>
-                        <?php foreach ($libraries as $library): 
-                            $is_premium = LLM_Prompts_Plugin::is_premium_library($library->term_id);
-                            ?>
-                            <option value="<?php echo $library->term_id; ?>" data-premium="<?php echo $is_premium ? '1' : '0'; ?>">
-                                <?php echo $library->name; ?>
-                                <?php if ($is_premium): ?> 🔒<?php endif; ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                
 
-                <div class="llm-filter-section">
-                    <label>Search any keyword, topic or tag</label>
-                    <input type="text" id="llm-search-input" placeholder="Search">
-                </div>
-
-                <div class="llm-filter-section">
-                    <label>Sort by</label>
-                    <select id="llm-sort-filter">
-                        <option value="newest">Newest to oldest</option>
-                        <option value="oldest">Oldest to newest</option>
-                        <option value="name_asc">Name (A-Z)</option>
-                        <option value="name_desc">Name (Z-A)</option>
-                    </select>
-                </div>
-
-                <div class="llm-filter-section">
-                    <label>
-                        <input type="checkbox" id="llm-video-filter"> Video Tutorial
-                    </label>
-                    <p class="llm-filter-description">When checked, only shows prompts with video explained.</p>
-                </div>
-
-                <div class="llm-filter-section">
-                    <label>Filter by topic</label>
-                    <div class="llm-checkbox-container" id="llm-topics-container">
+                <!-- Sidebar header with logo and search -->
+                <div class="llm-sidebar-header">
+                    <div class="llm-logo">
                         <?php
-                        $visible_topics = array_slice($topics, 0, 5);
-                        $hidden_topics = array_slice($topics, 5);
-
-                        foreach ($visible_topics as $topic): ?>
-                            <label class="llm-checkbox-label">
-                                <input type="checkbox" class="llm-topic-filter" value="<?php echo $topic->term_id; ?>">
-                                <?php echo $topic->name; ?>
-                            </label>
-                        <?php endforeach; ?>
-
-                        <?php if (count($hidden_topics) > 0): ?>
-                            <div class="llm-hidden-checkboxes" id="llm-hidden-topics">
-                                <?php foreach ($hidden_topics as $topic): ?>
-                                    <label class="llm-checkbox-label">
-                                        <input type="checkbox" class="llm-topic-filter" value="<?php echo $topic->term_id; ?>">
-                                        <?php echo $topic->name; ?>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
+                        $custom_logo_url = get_option('llm_custom_logo_url', '');
+                        $logo_size = get_option('llm_logo_size', '32');
+                        
+                        if ($custom_logo_url): ?>
+                            <img src="<?php echo esc_url($custom_logo_url); ?>" alt="<?php echo esc_attr(get_bloginfo('name')); ?>"
+                                style="width: <?php echo $logo_size; ?>px; height: <?php echo $logo_size; ?>px; object-fit: contain;">
+                        <?php else:
+                            $site_icon_url = get_site_icon_url();
+                            if ($site_icon_url): ?>
+                                <img src="<?php echo esc_url($site_icon_url); ?>" alt="<?php echo esc_attr(get_bloginfo('name')); ?>"
+                                    style="width: <?php echo $logo_size; ?>px; height: <?php echo $logo_size; ?>px; object-fit: contain;">
+                            <?php else: ?>
+                                <span><?php echo esc_html(get_bloginfo('name')); ?></span>
+                            <?php endif; ?>
                         <?php endif; ?>
+                    </div>
+                    <svg class="llm-search-icon" id="llm-search-trigger" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                </div>
+
+                <!-- Search overlay -->
+                <div class="llm-search-overlay" id="llm-search-overlay">
+                    <div class="llm-search-container">
+                        <input type="text" id="llm-search-input" placeholder="Search prompts, topics, tags...">
                     </div>
                 </div>
 
-                <div class="llm-filter-section">
-                    <label>Filter by tag</label>
-                    <div class="llm-checkbox-container" id="llm-tags-container">
-                        <?php
-                        $visible_tags = array_slice($tags, 0, 5);
-                        $hidden_tags = array_slice($tags, 5);
-
-                        foreach ($visible_tags as $tag): ?>
-                            <label class="llm-checkbox-label">
-                                <input type="checkbox" class="llm-tag-filter" value="<?php echo $tag->term_id; ?>">
-                                <?php echo $tag->name; ?>
-                            </label>
-                        <?php endforeach; ?>
-
-                        <?php if (count($hidden_tags) > 0): ?>
-                            <div class="llm-hidden-checkboxes" id="llm-hidden-tags">
-                                <?php foreach ($hidden_tags as $tag): ?>
-                                    <label class="llm-checkbox-label">
-                                        <input type="checkbox" class="llm-tag-filter" value="<?php echo $tag->term_id; ?>">
-                                        <?php echo $tag->name; ?>
-                                    </label>
+                <!-- Filter sections -->
+                <div class="llm-filter-sections">
+                    <!-- Select Library -->
+                    <div class="llm-filter-element" id="library-filter">
+                        <div class="llm-filter-header">
+                            <svg class="llm-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                            </svg>
+                            <span class="llm-filter-title">SELEZIONA LIBRERIA</span>
+                            <svg class="llm-filter-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="6,9 12,15 18,9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="llm-filter-content">
+                            <select id="llm-library-filter">
+                                <?php foreach ($libraries as $library):
+                                    $is_premium = LLM_Prompts_Plugin::is_premium_library($library->term_id);
+                                    $is_selected = ($selected_library && $selected_library->term_id == $library->term_id);
+                                    ?>
+                                    <option value="<?php echo $library->term_id; ?>"
+                                        data-premium="<?php echo $is_premium ? '1' : '0'; ?>"
+                                        <?php selected($is_selected); ?>>
+                                        <?php echo $library->name; ?>
+                                        <?php if ($is_premium): ?> 🔒<?php endif; ?>
+                                    </option>
                                 <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Video Tutorial -->
+                    <div class="llm-filter-element" id="video-filter">
+                        <div class="llm-filter-header">
+                            <svg class="llm-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                            </svg>
+                            <span class="llm-filter-title">VIDEO TUTORIAL</span>
+                            <label class="llm-checkbox-label" style="margin: 0; cursor: pointer;">
+                                <input type="checkbox" id="llm-video-filter" style="margin: 0;">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Filter by Topic -->
+                    <div class="llm-filter-element" id="topic-filter">
+                        <div class="llm-filter-header">
+                            <svg class="llm-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 2l3 3 3-3 3 3v12l-3-3-3 3-3-3-3 3V5z"></path>
+                            </svg>
+                            <span class="llm-filter-title">FILTRA PER ARGOMENTO</span>
+                            <svg class="llm-filter-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="6,9 12,15 18,9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="llm-filter-content">
+                            <?php foreach ($topics as $topic): ?>
+                                <label class="llm-checkbox-label">
+                                    <input type="checkbox" class="llm-topic-filter" value="<?php echo $topic->term_id; ?>">
+                                    <?php echo $topic->name; ?>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                    <!-- Filter by Tag -->
+                    <div class="llm-filter-element" id="tag-filter">
+                        <div class="llm-filter-header">
+                            <svg class="llm-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                            </svg>
+                            <span class="llm-filter-title">FILTRA PER TAG</span>
+                            <svg class="llm-filter-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="6,9 12,15 18,9"></polyline>
+                            </svg>
+                        </div>
+                        <div class="llm-filter-content">
+                            <?php foreach ($tags as $tag): ?>
+                                <label class="llm-checkbox-label">
+                                    <input type="checkbox" class="llm-tag-filter" value="<?php echo $tag->term_id; ?>">
+                                    <?php echo $tag->name; ?>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 </div>
-                <div class="llm-sidebar-logout-btn-container">
-                    <a href="<?php echo wp_logout_url(home_url('/dashboard/')); ?>" class="llm-logout-btn">Logout</a>
+
+                <!-- User section at bottom -->
+                <div class="llm-user-section">
+                    <div class="llm-user-info">
+                        <div class="llm-user-icon"><?php echo substr(wp_get_current_user()->display_name, 0, 1); ?></div>
+                        <span><?php echo wp_get_current_user()->display_name; ?></span>
+                    </div>
+                    <a href="<?php echo wp_logout_url(home_url('/aclas-knowledge-hub/')); ?>">
+                        <svg class="llm-logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16,17 21,12 16,7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </a>
                 </div>
             </div>
 
             <div class="llm-content">
                 <div class="llm-header">
-                    <h1>LLM Prompts</h1>
-                    <?php 
+                    <h1><?php echo esc_html($header_title); ?></h1>
+                    <?php
                     $current_user_id = get_current_user_id();
                     $user = wp_get_current_user();
                     $is_special_student = user_can($user, 'academy_student') && LLM_Prompts_Plugin::is_special_offer_student($current_user_id);
-                    
-                    if ($is_special_student): ?>
-                        <div class="llm-special-banner" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
-                            <h3 style="margin: 0 0 8px 0; font-size: 18px;">🎉 Special Offer Student</h3>
-                            <p style="margin: 0; font-size: 14px; opacity: 0.9;">Congratulations! You have special access to the LLM Dashboard as part of our Academy program.</p>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <p>A library of ready-to-use prompts for ChatGPT and other language models. They'll help you write better,
-                        solve problems faster, and get more done.</p>
-                    <p><strong>Not sure where to start? Try filtering by tag for 'Staff Pick' or 'Popular' to find our
-                            favorites.</strong></p>
+                    ?>
                 </div>
 
                 <div id="llm-prompts-feed" class="llm-prompts-feed">
                     <?php echo $this->get_initial_prompts(); ?>
                 </div>
 
-                <div id="llm-load-more-container" class="llm-load-more-container">
-                    <button id="llm-load-more" class="llm-load-more">LOAD MORE</button>
+                <div id="llm-pagination" class="llm-pagination">
+                    <a href="#" class="llm-pagination-arrow" id="llm-prev-page">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <polyline points="15,18 9,12 15,6"></polyline>
+                        </svg>
+                    </a>
+                    <div class="llm-pagination-numbers" id="llm-pagination-numbers">
+                        <a href="#" class="llm-pagination-number active" data-page="1">1</a>
+                        <a href="#" class="llm-pagination-number" data-page="2">2</a>
+                        <a href="#" class="llm-pagination-number" data-page="3">3</a>
+                        <span class="llm-pagination-dots">...</span>
+                        <a href="#" class="llm-pagination-number" data-page="5">5</a>
+                    </div>
+                    <a href="#" class="llm-pagination-arrow" id="llm-next-page">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                            <polyline points="9,18 15,12 9,6"></polyline>
+                        </svg>
+                    </a>
                 </div>
 
                 <div id="llm-no-results" class="llm-no-results" style="display:none;">
                     No items found.
                 </div>
 
-                <div id="llm-premium-overlay" class="llm-premium-overlay" style="display:none;">
+                <div id="llm-premium-overlay" class="llm-premium-overlay" style="display:<?php echo $show_premium_overlay ? 'flex' : 'none'; ?>;">
                     <div class="llm-premium-content">
                         <div class="llm-premium-header">
                             <h2><?php echo esc_html(get_option('llm_premium_title', '🔒 Premium Library')); ?></h2>
                         </div>
-                        
+
                         <div class="llm-premium-message">
-                            <?php 
+                            <?php
                             $premium_message = get_option('llm_premium_message', "⭐ Coming Soon!\n\nThis premium library is currently under development and will be available soon with exclusive high-quality prompts.");
-                            echo nl2br(esc_html($premium_message)); 
+                            echo nl2br(esc_html($premium_message));
                             ?>
                         </div>
 
                         <div class="llm-premium-actions">
-                            <?php 
+                            <?php
                             $button_url = get_option('llm_premium_button_url', '#');
                             $button_text = get_option('llm_premium_button_text', '🚀 Get Premium Access');
-                            
+
                             if ($button_url && $button_url !== '#'): ?>
                                 <a href="<?php echo esc_url($button_url); ?>" class="llm-premium-button" target="_blank">
                                     <?php echo esc_html($button_text); ?>
                                 </a>
                             <?php endif; ?>
-                            
+
                             <button id="llm-back-to-dashboard" class="llm-back-button">
-                                ← Back to Dashboard
+                                ← Back to Libraries
                             </button>
                         </div>
                     </div>
@@ -277,6 +465,69 @@ class LLM_Prompts_Frontend
             'orderby' => 'date',
             'order' => 'DESC'
         );
+
+        // Get selected library from URL parameter or use default
+        $selected_library_slug = isset($_GET['library']) ? sanitize_text_field($_GET['library']) : '';
+        $selected_library = null;
+        $default_library_id = get_option('llm_default_library', '');
+        
+        // Find selected library by slug
+        if ($selected_library_slug) {
+            $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+            foreach ($libraries as $library) {
+                if ($library->slug === $selected_library_slug) {
+                    $selected_library = $library;
+                    break;
+                }
+            }
+        } elseif ($default_library_id) {
+            // Use default library if no URL parameter
+            $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+            foreach ($libraries as $library) {
+                if ($library->term_id == $default_library_id) {
+                    $selected_library = $library;
+                    break;
+                }
+            }
+        }
+
+        $tax_queries = array();
+
+        // Filter by selected library if one is chosen (but don't show prompts if it's premium)
+        if ($selected_library && !LLM_Prompts_Plugin::is_premium_library($selected_library->term_id)) {
+            $tax_queries[] = array(
+                'taxonomy' => 'llm_library',
+                'field' => 'term_id',
+                'terms' => array($selected_library->term_id),
+                'operator' => 'IN'
+            );
+        } elseif ($selected_library && LLM_Prompts_Plugin::is_premium_library($selected_library->term_id)) {
+            // If premium library is selected, don't show any prompts (overlay will be shown instead)
+            $tax_queries[] = array(
+                'taxonomy' => 'llm_library',
+                'field' => 'term_id',
+                'terms' => array(-1), // Non-existent term ID to return no results
+                'operator' => 'IN'
+            );
+        } else {
+            // Exclude premium libraries when no specific library is selected
+            $premium_libraries = LLM_Prompts_Plugin::get_premium_libraries();
+            if (!empty($premium_libraries)) {
+                $premium_library_ids = array_map(function ($lib) {
+                    return $lib->term_id;
+                }, $premium_libraries);
+                $tax_queries[] = array(
+                    'taxonomy' => 'llm_library',
+                    'field' => 'term_id',
+                    'terms' => $premium_library_ids,
+                    'operator' => 'NOT IN'
+                );
+            }
+        }
+
+        if (!empty($tax_queries)) {
+            $args['tax_query'] = $tax_queries;
+        }
 
         $prompts = new WP_Query($args);
 
@@ -312,34 +563,45 @@ class LLM_Prompts_Frontend
                     </div>
                 <?php endif; ?>
                 <div class="card-heading">
-                    <div class="llm-prompt-tags">
-                        <?php if ($topics): ?>
-                            <?php foreach ($topics as $index => $topic): ?>
-                                <span class="llm-topic-tag" data-topic-id="<?php echo $topic->term_id; ?>"
-                                    style="background-color: <?php echo $topic_colors[$index % count($topic_colors)]; ?>;"><?php echo $topic->name; ?></span>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-
-                        <?php if ($tags): ?>
-                            <?php foreach ($tags as $index => $tag): ?>
-                                <span class="llm-tag-tag" data-tag-id="<?php echo $tag->term_id; ?>"
-                                    style="background-color: <?php echo $tag_colors[$index % count($tag_colors)]; ?>;"><?php echo $tag->name; ?></span>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
                     <h3 class="llm-prompt-title"><?php echo get_the_title($post); ?></h3>
+                    <?php if ($short_description): ?>
+                        <p class="llm-prompt-description"><?php echo esc_html($short_description); ?></p>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="card-detail">
-                <?php if ($short_description): ?>
-                    <p class="llm-prompt-description"><?php echo esc_html($short_description); ?></p>
-                <?php endif; ?>
+                <div class="llm-prompt-tags">
+                        <?php 
+                        $tag_count = 0;
+                        $max_tags = 10;
+                        
+                        if ($topics): ?>
+                            <?php foreach ($topics as $index => $topic): 
+                                if ($tag_count >= $max_tags) break;
+                            ?>
+                                <span class="llm-topic-tag" data-topic-id="<?php echo $topic->term_id; ?>"
+                                    style="background-color: <?php echo $topic_colors[$index % count($topic_colors)]; ?>;"><?php echo $topic->name; ?></span>
+                            <?php 
+                                $tag_count++;
+                            endforeach; ?>
+                        <?php endif; ?>
+
+                        <?php if ($tags && $tag_count < $max_tags): ?>
+                            <?php foreach ($tags as $index => $tag): 
+                                if ($tag_count >= $max_tags) break;
+                            ?>
+                                <span class="llm-tag-tag" data-tag-id="<?php echo $tag->term_id; ?>"
+                                    style="background-color: <?php echo $tag_colors[$index % count($tag_colors)]; ?>;"><?php echo $tag->name; ?></span>
+                            <?php 
+                                $tag_count++;
+                            endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 <a href="<?php echo get_permalink($post); ?>" target="_blank" rel="noopener noreferrer"
                     class="llm-prompt-arrow">
-                    <svg width="31" height="31" viewBox="0 0 31 31" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="0.599609" y="0.100098" width="30.4" height="30.4" rx="5.13" fill="black"></rect>
-                        <path d="M8.95898 15.3002H22.639M22.639 15.3002L17.509 10.1702M22.639 15.3002L17.509 20.4302"
-                            stroke="white" stroke-width="1.2825" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M7 17L17 7M9 7H17V15" stroke="white" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
                     </svg>
                 </a>
             </div>

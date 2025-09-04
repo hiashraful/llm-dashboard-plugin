@@ -17,11 +17,15 @@ class LLM_Prompts_Admin
         add_action('admin_post_import_prompts', array($this, 'import_prompts'));
         add_action('admin_post_save_special_offer', array($this, 'save_special_offer'));
         add_action('admin_post_save_premium_libraries', array($this, 'save_premium_libraries'));
+        add_action('admin_post_save_default_settings', array($this, 'save_default_settings'));
         add_action('init', array($this, 'add_elementor_support'));
         add_filter('manage_users_columns', array($this, 'add_user_columns'));
         add_filter('manage_users_custom_column', array($this, 'show_user_columns'), 10, 3);
         add_action('restrict_manage_users', array($this, 'add_user_filters'));
         add_filter('pre_get_users', array($this, 'filter_users_by_special_offer'));
+        add_action('admin_head', array($this, 'customize_editor_labels'));
+        add_action('admin_init', array($this, 'remove_unnecessary_meta_boxes'));
+        add_filter('screen_options_show_screen', array($this, 'remove_screen_options'), 10, 2);
     }
 
     public function add_elementor_support()
@@ -32,12 +36,12 @@ class LLM_Prompts_Admin
     public function add_admin_menu()
     {
         add_menu_page(
-            'LLM Dashboard',
-            'LLM Dashboard',
+            'Knowledge Hub',
+            'Knowledge Hub',
             'manage_options',
             'llm-dashboard-admin',
             array($this, 'dashboard_page'),
-            'dashicons-format-chat',
+            'dashicons-buddicons-replies',
             25
         );
 
@@ -125,6 +129,15 @@ class LLM_Prompts_Admin
             'llm-premium-libraries',
             array($this, 'premium_libraries_page')
         );
+
+        add_submenu_page(
+            'llm-dashboard-admin',
+            'Default Settings',
+            'Default Settings',
+            'manage_options',
+            'llm-default-settings',
+            array($this, 'default_settings_page')
+        );
     }
 
     public function dashboard_page()
@@ -142,7 +155,7 @@ class LLM_Prompts_Admin
             <div class="llm-header">
                 <div class="llm-header-container">
                     <div class="llm-header-content">
-                        <h1 class="llm-header-title">LLM Prompts Dashboard</h1>
+                        <h1 class="llm-header-title">ACLAS Knowledge Hub</h1>
                         <div class="llm-header-actions">
                             <a href="<?php echo admin_url('post-new.php?post_type=llm_prompt'); ?>" class="llm-add-button">
                                 <svg class="llm-add-button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -681,9 +694,19 @@ class LLM_Prompts_Admin
 
     public function multiple_prompts_callback($post)
     {
-        $prompts = get_post_meta($post->ID, '_llm_multiple_prompts', true);
-        if (!$prompts)
+        $prompts_data = get_post_meta($post->ID, '_llm_multiple_prompts', true);
+        
+        // Handle both old array format and new string format
+        if (is_string($prompts_data) && !empty($prompts_data)) {
+            // New string format - convert back to array for editing
+            $prompts = explode('---PROMPT SEPARATOR---', $prompts_data);
+        } elseif (is_array($prompts_data) && !empty($prompts_data)) {
+            // Old array format - use as is
+            $prompts = $prompts_data;
+        } else {
+            // No data - start with empty prompt
             $prompts = array('');
+        }
         ?>
         <div id="llm-multiple-prompts">
             <?php foreach ($prompts as $index => $prompt): ?>
@@ -691,16 +714,16 @@ class LLM_Prompts_Admin
                     style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
                     <label>Prompt <?php echo $index + 1; ?>:</label>
                     <textarea name="llm_multiple_prompts[]" rows="4"
-                        style="width: 100%; margin-top: 5px;"><?php echo esc_textarea($prompt); ?></textarea>
+                        style="width: 100%; margin-top: 5px; font-family: 'Inter', sans-serif;"><?php echo esc_textarea($prompt); ?></textarea>
                     <?php if ($index > 0): ?>
                         <button type="button" onclick="removePrompt(this)"
-                            style="margin-top: 5px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Remove</button>
+                            style="margin-top: 5px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-family: 'Inter', sans-serif;">Remove</button>
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>
         <button type="button" id="add-prompt"
-            style="background: #0073aa; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px;">Add
+            style="background: #0073aa; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-top: 10px; font-family: 'Inter', sans-serif;">Add
             Another Prompt</button>
 
         <script>
@@ -712,8 +735,8 @@ class LLM_Prompts_Admin
                 div.style.cssText = 'margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;';
                 div.innerHTML = `
                 <label>Prompt ${count + 1}:</label>
-                <textarea name="llm_multiple_prompts[]" rows="4" style="width: 100%; margin-top: 5px;"></textarea>
-                <button type="button" onclick="removePrompt(this)" style="margin-top: 5px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">Remove</button>
+                <textarea name="llm_multiple_prompts[]" rows="4" style="width: 100%; margin-top: 5px; font-family: 'Inter', sans-serif;"></textarea>
+                <button type="button" onclick="removePrompt(this)" style="margin-top: 5px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-family: 'Inter', sans-serif;">Remove</button>
             `;
                 container.appendChild(div);
             });
@@ -750,8 +773,15 @@ class LLM_Prompts_Admin
 
         if (isset($_POST['llm_multiple_prompts'])) {
             $prompts = array_map('sanitize_textarea_field', $_POST['llm_multiple_prompts']);
-            $prompts = array_filter($prompts);
-            update_post_meta($post_id, '_llm_multiple_prompts', $prompts);
+            $prompts = array_filter($prompts); // Remove empty entries
+            
+            // Convert array to string format expected by frontend
+            if (!empty($prompts)) {
+                $prompts_string = implode('---PROMPT SEPARATOR---', $prompts);
+                update_post_meta($post_id, '_llm_multiple_prompts', $prompts_string);
+            } else {
+                delete_post_meta($post_id, '_llm_multiple_prompts');
+            }
         }
     }
 
@@ -815,13 +845,13 @@ class LLM_Prompts_Admin
                     <div class="llm-status-cards" style="margin-bottom: 20px;">
                         <div class="llm-status-card" style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
                             <h3 style="margin: 0 0 10px 0;">Current Status</h3>
-                            <p style="margin: 0; font-size: 16px; color: <?php echo $offer_status === 'active' ? '#10B981' : '#EF4444'; ?>;">
+                            <p style="margin: 0; font-size: 16px; color: <?php echo $offer_status === 'active' ? '#10B981' : '#EF4444'; ?>; font-family: 'Inter', sans-serif;">
                                 <?php echo ucfirst($offer_status); ?>
                             </p>
                         </div>
                         <div class="llm-status-card" style="background: #f9fafb; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
                             <h3 style="margin: 0 0 10px 0;">Special Students</h3>
-                            <p style="margin: 0; font-size: 16px;">
+                            <p style="margin: 0; font-size: 16px; font-family: 'Inter', sans-serif;">
                                 <?php echo $special_count; ?> / <?php echo $offer_limit; ?> assigned
                             </p>
                             <div style="background: #e5e7eb; height: 8px; border-radius: 4px; margin-top: 8px;">
@@ -909,9 +939,9 @@ class LLM_Prompts_Admin
             $is_academy_student = $user && user_can($user, 'academy_student');
             
             if ($is_special && $is_academy_student) {
-                return '<span style="background: #10B981; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">SPECIAL</span>';
+                return '<span style="background: #10B981; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; font-family: \'Inter\', sans-serif;">SPECIAL</span>';
             } elseif ($is_academy_student) {
-                return '<span style="background: #3B82F6; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500;">STUDENT</span>';
+                return '<span style="background: #3B82F6; color: white; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; font-family: \'Inter\', sans-serif;">STUDENT</span>';
             }
             return '-';
         }
@@ -994,7 +1024,7 @@ class LLM_Prompts_Admin
                                             <td>
                                                 <strong><?php echo esc_html($library->name); ?></strong>
                                                 <?php if ($library->description): ?>
-                                                    <div style="color: #666; font-size: 12px; margin-top: 2px;">
+                                                    <div style="color: #666; font-size: 12px; margin-top: 2px; font-family: 'Inter', sans-serif;">
                                                         <?php echo esc_html($library->description); ?>
                                                     </div>
                                                 <?php endif; ?>
@@ -1095,4 +1125,307 @@ class LLM_Prompts_Admin
         wp_redirect(admin_url('admin.php?page=llm-premium-libraries&updated=true'));
         exit;
     }
+
+    public function customize_editor_labels()
+    {
+        global $post_type;
+        
+        if ($post_type === 'llm_prompt') {
+            ?>
+            <script type="text/javascript">
+            jQuery(document).ready(function($) {
+                // Change the main editor label - bigger heading
+                $('#postdivrich .wp-editor-tabs').before('<h2 style="margin: 15px 0 10px 0; font-size: 18px; font-weight: 600; color: #1d2327;">The Method</h2>');
+                
+                // Remove Add Media button
+                $('#wp-content-media-buttons').hide();
+                
+                // Make editor smaller (simple height adjustment)
+                $('#content').css('height', '200px');
+                
+                // Style the editor wrapper
+                $('#postdivrich').css({
+                    'border': '1px solid #ddd',
+                    'border-radius': '4px',
+                    'padding': '10px',
+                    'margin-top': '10px'
+                });
+            });
+            </script>
+            <?php
+        }
+    }
+
+    public function remove_unnecessary_meta_boxes()
+    {
+        // Remove for llm_prompt post type - try multiple hooks for better coverage
+        add_action('admin_menu', function() {
+            remove_meta_box('postcustom', 'llm_prompt', 'normal'); // Custom Fields
+            remove_meta_box('commentstatusdiv', 'llm_prompt', 'normal'); // Comments
+            remove_meta_box('trackbacksdiv', 'llm_prompt', 'normal'); // Trackbacks
+            remove_meta_box('authordiv', 'llm_prompt', 'normal'); // Author
+            remove_meta_box('slugdiv', 'llm_prompt', 'normal'); // Slug
+            remove_meta_box('postexcerpt', 'llm_prompt', 'normal'); // Excerpt
+        }, 99);
+
+        // Also try removing after meta boxes are added
+        add_action('add_meta_boxes', function() {
+            remove_meta_box('postcustom', 'llm_prompt', 'normal'); // Custom Fields - try again here
+            
+            // Restrict This Content plugin
+            remove_meta_box('rtc-meta-box', 'llm_prompt', 'side');
+            remove_meta_box('restrict-content-pro', 'llm_prompt', 'side');
+            
+            // WPCode Page Scripts
+            remove_meta_box('wpcode_page_scripts_metabox', 'llm_prompt', 'side');
+            remove_meta_box('wpcode-metabox', 'llm_prompt', 'side');
+            
+            // MonsterInsights
+            remove_meta_box('monsterinsights_posts_page_insights', 'llm_prompt', 'normal');
+            remove_meta_box('monsterinsights-post-analytics', 'llm_prompt', 'normal');
+            
+            // Other common plugin meta boxes
+            remove_meta_box('wpseo_meta', 'llm_prompt', 'normal'); // Yoast SEO
+            remove_meta_box('rankmath_metabox', 'llm_prompt', 'normal'); // RankMath SEO
+            remove_meta_box('aioseo-settings', 'llm_prompt', 'normal'); // All in One SEO
+            remove_meta_box('elementor_custom_css', 'llm_prompt', 'side'); // Elementor Custom CSS
+        }, 99);
+
+        // Disable custom fields support entirely for this post type
+        add_action('admin_head-post.php', function() {
+            global $post_type;
+            if ($post_type === 'llm_prompt') {
+                ?>
+                <script type="text/javascript">
+                jQuery(document).ready(function($) {
+                    // Hide any remaining custom fields interface
+                    $('#postcustom, .postbox[id*="custom"]').hide();
+                    $('#screen-options-link-wrap').hide(); // Hide screen options entirely
+                });
+                </script>
+                <?php
+            }
+        });
+
+        add_action('admin_head-post-new.php', function() {
+            global $post_type;
+            if ($post_type === 'llm_prompt') {
+                ?>
+                <script type="text/javascript">
+                jQuery(document).ready(function($) {
+                    // Hide any remaining custom fields interface
+                    $('#postcustom, .postbox[id*="custom"]').hide();
+                    $('#screen-options-link-wrap').hide(); // Hide screen options entirely
+                });
+                </script>
+                <?php
+            }
+        });
+    }
+
+    public function remove_screen_options($show, $screen)
+    {
+        if (isset($screen->post_type) && $screen->post_type === 'llm_prompt') {
+            return false; // Hide screen options for llm_prompt
+        }
+        return $show;
+    }
+
+    public function default_settings_page()
+    {
+        $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
+        $default_library_id = get_option('llm_default_library', '');
+        $custom_logo_url = get_option('llm_custom_logo_url', '');
+        $logo_size = get_option('llm_logo_size', '32');
+        $selected_nav_menu = get_option('llm_nav_menu', '');
+        
+        // Get all registered menus
+        $nav_menus = wp_get_nav_menus();
+
+        if (isset($_GET['updated']) && $_GET['updated'] == 'true') {
+            echo '<div class="notice notice-success"><p>Default settings updated successfully!</p></div>';
+        }
+        
+        // Enqueue WordPress media uploader
+        wp_enqueue_media();
+
+        ?>
+        <div class="wrap">
+            <h1>Default Settings</h1>
+            
+            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+                <input type="hidden" name="action" value="save_default_settings">
+                <?php wp_nonce_field('llm_default_settings_nonce'); ?>
+
+                <div class="llm-default-settings" style="margin-top: 20px;">
+                    <div class="llm-settings-section">
+                        <h2>Dashboard Logo</h2>
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">Custom Logo</th>
+                                <td>
+                                    <div class="llm-logo-upload">
+                                        <input type="hidden" name="custom_logo_url" id="custom_logo_url" value="<?php echo esc_attr($custom_logo_url); ?>">
+                                        <div class="llm-logo-preview" style="margin-bottom: 10px;">
+                                            <?php if ($custom_logo_url): ?>
+                                                <img src="<?php echo esc_url($custom_logo_url); ?>" 
+                                                     style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; padding: 5px;">
+                                            <?php else: ?>
+                                                <div style="width: 100px; height: 50px; border: 2px dashed #ddd; display: flex; align-items: center; justify-content: center; color: #999;">
+                                                    No Image
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <button type="button" class="button" id="upload_logo_button">
+                                            <?php echo $custom_logo_url ? 'Change Logo' : 'Upload Logo'; ?>
+                                        </button>
+                                        <?php if ($custom_logo_url): ?>
+                                            <button type="button" class="button" id="remove_logo_button" style="margin-left: 10px;">Remove Logo</button>
+                                        <?php endif; ?>
+                                    </div>
+                                    <p class="description">Upload a custom logo for the dashboard sidebar. If no logo is set, the site icon will be used.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Logo Size</th>
+                                <td>
+                                    <input type="number" name="logo_size" value="<?php echo esc_attr($logo_size); ?>" 
+                                           min="16" max="100" step="1" class="small-text"> px
+                                    <p class="description">Set the logo size in pixels (width and height will be the same).</p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h2>Navigation Menu</h2>
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">Navigation Menu</th>
+                                <td>
+                                    <select name="nav_menu" class="regular-text">
+                                        <option value="">No Menu</option>
+                                        <?php foreach ($nav_menus as $menu): ?>
+                                            <option value="<?php echo $menu->term_id; ?>" 
+                                                    <?php selected($selected_nav_menu, $menu->term_id); ?>>
+                                                <?php echo esc_html($menu->name); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="description">Select a WordPress menu to display in the navigation header. The menu will appear in the center of the navigation bar.</p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h2>Default Library</h2>
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">Default Library</th>
+                                <td>
+                                    <select name="default_library" class="regular-text">
+                                        <option value="">No Default (Show All Libraries)</option>
+                                        <?php foreach ($libraries as $library): ?>
+                                            <option value="<?php echo $library->term_id; ?>" 
+                                                    <?php selected($default_library_id, $library->term_id); ?>>
+                                                <?php echo esc_html($library->name); ?>
+                                                (<?php echo $library->count; ?> prompts)
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="description">Select the default library that will be shown when users visit the dashboard without a specific library parameter.</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <?php submit_button('Save Default Settings'); ?>
+            </form>
+
+            <?php if (!empty($libraries)): ?>
+                <div class="llm-url-examples" style="margin-top: 30px; background: #f9f9f9; padding: 20px; border-radius: 8px;">
+                    <h3>Library URLs</h3>
+                    <ul style="font-family: monospace; background: white; padding: 15px; border-radius: 4px; border: 1px solid #ddd;">
+                        <?php foreach ($libraries as $library): ?>
+                            <li style="margin-bottom: 8px;">
+                                <strong><?php echo esc_html($library->name); ?>:</strong><br>
+                                <code><?php echo home_url('/aclas-knowledge-hub/?library=' . $library->slug); ?></code>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            var mediaUploader;
+            
+            $('#upload_logo_button').click(function(e) {
+                e.preventDefault();
+                
+                if (mediaUploader) {
+                    mediaUploader.open();
+                    return;
+                }
+                
+                mediaUploader = wp.media.frames.file_frame = wp.media({
+                    title: 'Choose Logo',
+                    button: {
+                        text: 'Choose Logo'
+                    },
+                    multiple: false,
+                    library: {
+                        type: 'image'
+                    }
+                });
+                
+                mediaUploader.on('select', function() {
+                    var attachment = mediaUploader.state().get('selection').first().toJSON();
+                    $('#custom_logo_url').val(attachment.url);
+                    $('.llm-logo-preview').html('<img src="' + attachment.url + '" style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; padding: 5px;">');
+                    $('#upload_logo_button').text('Change Logo');
+                    
+                    if ($('#remove_logo_button').length === 0) {
+                        $('#upload_logo_button').after('<button type="button" class="button" id="remove_logo_button" style="margin-left: 10px;">Remove Logo</button>');
+                    }
+                });
+                
+                mediaUploader.open();
+            });
+            
+            $(document).on('click', '#remove_logo_button', function(e) {
+                e.preventDefault();
+                $('#custom_logo_url').val('');
+                $('.llm-logo-preview').html('<div style="width: 100px; height: 50px; border: 2px dashed #ddd; display: flex; align-items: center; justify-content: center; color: #999;">No Image</div>');
+                $('#upload_logo_button').text('Upload Logo');
+                $(this).remove();
+            });
+        });
+        </script>
+        <?php
+    }
+
+    public function save_default_settings()
+    {
+        if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['_wpnonce'], 'llm_default_settings_nonce')) {
+            wp_die('Unauthorized');
+        }
+
+        $default_library = sanitize_text_field($_POST['default_library']);
+        $custom_logo_url = esc_url_raw($_POST['custom_logo_url']);
+        $logo_size = intval($_POST['logo_size']);
+        $nav_menu = intval($_POST['nav_menu']);
+        
+        // Validate logo size
+        if ($logo_size < 16) $logo_size = 16;
+        if ($logo_size > 100) $logo_size = 100;
+        
+        update_option('llm_default_library', $default_library);
+        update_option('llm_custom_logo_url', $custom_logo_url);
+        update_option('llm_logo_size', $logo_size);
+        update_option('llm_nav_menu', $nav_menu);
+
+        wp_redirect(admin_url('admin.php?page=llm-default-settings&updated=true'));
+        exit;
+    }
+
 }

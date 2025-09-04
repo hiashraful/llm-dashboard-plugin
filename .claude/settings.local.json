@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(c:\\Users\\Ashraf\\Desktop/**)",
+      "Read(C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content/**)",
+      "Read(C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content/**)",
+      "Read(C:\\Users\\Ashraf\\Downloads/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
