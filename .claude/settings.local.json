@@ -4,7 +4,9 @@
       "Read(c:\\Users\\Ashraf\\Desktop/**)",
       "Read(C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content/**)",
       "Read(C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content/**)",
-      "Read(C:\\Users\\Ashraf\\Downloads/**)"
+      "Read(C:\\Users\\Ashraf\\Downloads/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\assets/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)"
     ],
     "deny": [],
     "ask": []
