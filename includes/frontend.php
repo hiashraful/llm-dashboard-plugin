@@ -6,6 +6,7 @@ if (!defined('ABSPATH')) {
 
 class LLM_Prompts_Frontend
 {
+    private $pagination_data = array();
 
     public function __construct()
     {
@@ -233,7 +234,47 @@ class LLM_Prompts_Frontend
                         <span>Dashboard</span>
                     <?php endif; ?>
                 </div>
+                
+                <!-- Mobile Hamburger Menu -->
+                <div class="llm-hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
             </div>
+        </div>
+
+        <!-- Mobile Menu Overlay -->
+        <div class="llm-mobile-menu">
+            <div class="llm-mobile-menu-header">
+                <div class="llm-nav-item">
+                    <?php if ($custom_logo_url): ?>
+                        <img src="<?php echo esc_url($custom_logo_url); ?>" alt="Your Logo" class="llm-nav-logo">
+                    <?php else:
+                        $site_icon_url = get_site_icon_url();
+                        if ($site_icon_url): ?>
+                            <img src="<?php echo esc_url($site_icon_url); ?>" alt="Your Logo" class="llm-nav-logo">
+                        <?php else: ?>
+                            <span class="llm-nav-logo-text">Your Logo</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+                <div class="llm-mobile-close"></div>
+            </div>
+            <nav class="llm-mobile-menu-nav">
+                <?php
+                if ($nav_menu_id && wp_get_nav_menu_object($nav_menu_id)): 
+                    wp_nav_menu(array(
+                        'menu' => $nav_menu_id,
+                        'container' => false,
+                        'menu_class' => '',
+                        'fallback_cb' => false,
+                        'depth' => 1
+                    ));
+                else: ?>
+                    <a href="#">Dashboard</a>
+                <?php endif; ?>
+            </nav>
         </div>
 
         <div class="llm-dashboard">
@@ -396,27 +437,23 @@ class LLM_Prompts_Frontend
                     <?php echo $this->get_initial_prompts(); ?>
                 </div>
 
-                <div id="llm-pagination" class="llm-pagination">
-                    <a href="#" class="llm-pagination-arrow" id="llm-prev-page">
+                <div id="llm-pagination" class="llm-pagination" <?php if ($this->pagination_data['found_posts'] == 0 || $this->pagination_data['max_num_pages'] <= 1) echo 'style="display:none;"'; ?>>
+                    <a href="#" class="llm-pagination-arrow disabled" id="llm-prev-page">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <polyline points="15,18 9,12 15,6"></polyline>
                         </svg>
                     </a>
                     <div class="llm-pagination-numbers" id="llm-pagination-numbers">
-                        <a href="#" class="llm-pagination-number active" data-page="1">1</a>
-                        <a href="#" class="llm-pagination-number" data-page="2">2</a>
-                        <a href="#" class="llm-pagination-number" data-page="3">3</a>
-                        <span class="llm-pagination-dots">...</span>
-                        <a href="#" class="llm-pagination-number" data-page="5">5</a>
+                        <?php echo $this->generate_pagination_numbers(); ?>
                     </div>
-                    <a href="#" class="llm-pagination-arrow" id="llm-next-page">
+                    <a href="#" class="llm-pagination-arrow<?php if ($this->pagination_data['current_page'] >= $this->pagination_data['max_num_pages']) echo ' disabled'; ?>" id="llm-next-page">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                             <polyline points="9,18 15,12 9,6"></polyline>
                         </svg>
                     </a>
                 </div>
 
-                <div id="llm-no-results" class="llm-no-results" style="display:none;">
+                <div id="llm-no-results" class="llm-no-results" <?php if ($this->pagination_data['found_posts'] > 0) echo 'style="display:none;"'; ?>>
                     No items found.
                 </div>
 
@@ -538,9 +575,65 @@ class LLM_Prompts_Frontend
                 $this->render_prompt_card(get_post());
             }
         }
+        $html = ob_get_clean();
         wp_reset_postdata();
 
-        return ob_get_clean();
+        // Store pagination data for use in template
+        $this->pagination_data = array(
+            'found_posts' => $prompts->found_posts,
+            'max_num_pages' => $prompts->max_num_pages,
+            'current_page' => 1
+        );
+
+        return $html;
+    }
+
+    private function generate_pagination_numbers() 
+    {
+        $max_pages = $this->pagination_data['max_num_pages'];
+        $current_page = $this->pagination_data['current_page'];
+        
+        if ($max_pages <= 1) {
+            return '<a href="#" class="llm-pagination-number active" data-page="1">1</a>';
+        }
+        
+        $html = '';
+        
+        // Always show first page
+        $active = ($current_page == 1) ? ' active' : '';
+        $html .= '<a href="#" class="llm-pagination-number' . $active . '" data-page="1">1</a>';
+        
+        if ($max_pages > 1) {
+            // Show pages around current page
+            $start_page = max(2, $current_page - 1);
+            $end_page = min($max_pages - 1, $current_page + 1);
+            
+            // Add dots if needed
+            if ($start_page > 2) {
+                $html .= '<span class="llm-pagination-dots">...</span>';
+            }
+            
+            // Add middle pages
+            for ($i = $start_page; $i <= $end_page; $i++) {
+                if ($i !== 1 && $i !== $max_pages) {
+                    $active = ($current_page == $i) ? ' active' : '';
+                    $html .= '<a href="#" class="llm-pagination-number' . $active . '" data-page="' . $i . '">' . $i . '</a>';
+                }
+            }
+            
+            // Add dots if needed
+            if ($end_page < $max_pages - 1) {
+                $html .= '<span class="llm-pagination-dots">...</span>';
+            }
+            
+            // Always show last page if different from first
+            if ($max_pages > 1) {
+                $active = ($current_page == $max_pages) ? ' active' : '';
+                $html .= '<a href="#" class="llm-pagination-number' . $active . '" data-page="' . $max_pages . '">' . $max_pages . '</a>';
+            }
+        }
+        
+        return $html;
     }
 
     private function render_prompt_card($post)

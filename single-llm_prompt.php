@@ -88,7 +88,47 @@ if (have_posts()) {
                         <span>Dashboard</span>
                     <?php endif; ?>
                 </div>
+                
+                <!-- Mobile Hamburger Menu -->
+                <div class="llm-hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
             </div>
+        </div>
+
+        <!-- Mobile Menu Overlay -->
+        <div class="llm-mobile-menu">
+            <div class="llm-mobile-menu-header">
+                <div class="llm-nav-item">
+                    <?php if ($custom_logo_url): ?>
+                        <img src="<?php echo esc_url($custom_logo_url); ?>" alt="Your Logo" class="llm-nav-logo">
+                    <?php else:
+                        $site_icon_url = get_site_icon_url();
+                        if ($site_icon_url): ?>
+                            <img src="<?php echo esc_url($site_icon_url); ?>" alt="Your Logo" class="llm-nav-logo">
+                        <?php else: ?>
+                            <span class="llm-nav-logo-text">Your Logo</span>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+                <div class="llm-mobile-close"></div>
+            </div>
+            <nav class="llm-mobile-menu-nav">
+                <?php
+                if ($nav_menu_id && wp_get_nav_menu_object($nav_menu_id)): 
+                    wp_nav_menu(array(
+                        'menu' => $nav_menu_id,
+                        'container' => false,
+                        'menu_class' => '',
+                        'fallback_cb' => false,
+                        'depth' => 1
+                    ));
+                else: ?>
+                    <a href="#">Dashboard</a>
+                <?php endif; ?>
+            </nav>
         </div>
 
         <div class="llm-single-prompt">
