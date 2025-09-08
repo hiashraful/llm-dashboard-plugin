@@ -3,7 +3,7 @@
  * Plugin Name: ACLAS Knowledge Hub
  * Plugin URI: https://www.devash.pro/
  * Description: A library of ready-to-use prompts for ChatGPT and other LLMs
- * Version: 1.5.0
+ * Version: 1.5.3
  * Author: Dev Ash
  * Author URI: https://www.devash.pro/
  */
@@ -28,6 +28,7 @@ class LLM_Prompts_Plugin
         add_action('user_register', array($this, 'handle_new_user_registration'));
         add_action('set_user_role', array($this, 'handle_user_role_change'), 10, 3);
         add_action('rest_api_init', array($this, 'register_api_endpoints'));
+        add_action('wp', array($this, 'hide_admin_bar_on_dashboard_pages'));
         register_activation_hook(__FILE__, array($this, 'activate'));
     }
 
@@ -123,6 +124,17 @@ class LLM_Prompts_Plugin
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('llm_prompts_nonce')
             ));
+
+            // Add inline CSS for nav logo dimensions
+            $nav_logo_height = get_option('llm_nav_logo_height', '32');
+            $nav_logo_width = get_option('llm_nav_logo_width', '120');
+            $custom_css = "
+                :root {
+                    --llm-nav-logo-height: {$nav_logo_height}px;
+                    --llm-nav-logo-width: {$nav_logo_width}px;
+                }
+            ";
+            wp_add_inline_style('llm-prompts-style', $custom_css);
         }
     }
 
@@ -332,6 +344,36 @@ class LLM_Prompts_Plugin
             header('Access-Control-Max-Age: 86400');
         }
         return $served;
+    }
+
+    public function hide_admin_bar_on_dashboard_pages()
+    {
+        // Get the admin bar setting for administrators
+        $hide_admin_bar_for_admins = get_option('llm_hide_admin_bar_for_admins', 'yes');
+        
+        // If user is admin and setting is set to 'no', don't hide admin bar for admins
+        if (current_user_can('manage_options') && $hide_admin_bar_for_admins === 'no') {
+            return;
+        }
+        
+        // Check if we're on the dashboard page (contains llm_prompts_dashboard shortcode)
+        if (is_page('aclas-knowledge-hub')) {
+            show_admin_bar(false);
+            return;
+        }
+        
+        // Check if we're on a single prompt page
+        if (is_singular('llm_prompt')) {
+            show_admin_bar(false);
+            return;
+        }
+        
+        // Check if current page has the dashboard shortcode
+        global $post;
+        if ($post && has_shortcode($post->post_content, 'llm_prompts_dashboard')) {
+            show_admin_bar(false);
+            return;
+        }
     }
 }
 

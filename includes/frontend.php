@@ -129,6 +129,17 @@ class LLM_Prompts_Frontend
         wp_enqueue_style('llm-prompts-style', LLM_PROMPTS_URL . 'assets/style.css', array(), '1.0.19');
         wp_enqueue_script('llm-prompts-script', LLM_PROMPTS_URL . 'assets/script.js', array('jquery'), '1.0.19', true);
 
+        // Add inline CSS for nav logo dimensions
+        $nav_logo_height = get_option('llm_nav_logo_height', '32');
+        $nav_logo_width = get_option('llm_nav_logo_width', '120');
+        $custom_css = "
+            :root {
+                --llm-nav-logo-height: {$nav_logo_height}px;
+                --llm-nav-logo-width: {$nav_logo_width}px;
+            }
+        ";
+        wp_add_inline_style('llm-prompts-style', $custom_css);
+
         // Get selected library from URL parameter or use default
         $libraries = get_terms(array('taxonomy' => 'llm_library', 'hide_empty' => false));
         $selected_library_slug = isset($_GET['library']) ? sanitize_text_field($_GET['library']) : '';
@@ -666,6 +677,13 @@ class LLM_Prompts_Frontend
                 </div>
             </div>
         </div>
+        
+        <!-- Simple Footer -->
+        <div style="text-align: center; padding: 20px; color: black;">
+            <a href="https://cuadroacademy.com/privacy-policy" style="color: black; text-decoration: none;">Privacy Policy</a> | 
+            <a href="https://cuadroacademy.com/terms-conditions" style="color: black; text-decoration: none;">Terms & Conditions</a>
+        </div>
+        
         <?php
         return ob_get_clean();
     }

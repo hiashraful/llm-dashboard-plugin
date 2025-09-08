@@ -9,7 +9,7 @@
 /* Navigation Header Styles */
 .llm-nav-header {
     position: fixed;
-    top: 20px;
+    top: 10px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
@@ -46,8 +46,8 @@
 }
 
 .llm-nav-logo {
-    height: auto;
-    width: 120px;
+    height: var(--llm-nav-logo-height, 32px);
+    width: var(--llm-nav-logo-width, 120px);
     object-fit: contain;
     padding: 4px;
 }
@@ -519,6 +519,7 @@ body.page-template-default {
     justify-content: center;
     align-items: center;
     padding: 20px;
+    padding-bottom: 0;
     box-sizing: border-box;
     margin-top: 120px;
 }
@@ -529,7 +530,7 @@ body.page-template-default {
     background-color: #fff;
     border-radius: 25px;
     border: 2px solid #02062B1A;
-    height: calc(90vh - 40px);
+    height: calc(85vh - 40px);
     padding: 20px;
     box-sizing: border-box;
     display: flex;
@@ -859,7 +860,7 @@ body.page-template-default {
 .llm-content {
     flex: 1;
     min-width: 900px;
-    height: calc(90vh - 40px);
+    height: calc(85vh - 40px);
     overflow-y: auto;
     padding-left: 20px;
 }
@@ -1130,6 +1131,7 @@ body.page-template-default {
     margin: 0 auto;
     overflow: hidden;
     text-align: center;
+    padding-bottom: 20px;
 }
 
 .llm-single-header {

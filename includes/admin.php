@@ -1237,7 +1237,10 @@ class LLM_Prompts_Admin
         $default_library_id = get_option('llm_default_library', '');
         $custom_logo_url = get_option('llm_custom_logo_url', '');
         $logo_size = get_option('llm_logo_size', '32');
+        $nav_logo_height = get_option('llm_nav_logo_height', '32');
+        $nav_logo_width = get_option('llm_nav_logo_width', '120');
         $selected_nav_menu = get_option('llm_nav_menu', '');
+        $hide_admin_bar_for_admins = get_option('llm_hide_admin_bar_for_admins', 'yes');
         
         // Get all registered menus
         $nav_menus = wp_get_nav_menus();
@@ -1296,8 +1299,24 @@ class LLM_Prompts_Admin
                             </tr>
                         </table>
                         
-                        <h2>Navigation Menu</h2>
+                        <h2>Navigation Settings</h2>
                         <table class="form-table">
+                            <tr>
+                                <th scope="row">Navigation Logo Height</th>
+                                <td>
+                                    <input type="number" name="nav_logo_height" value="<?php echo esc_attr($nav_logo_height); ?>" 
+                                           min="16" max="100" step="1" class="small-text"> px
+                                    <p class="description">Set the navigation logo height in pixels.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Navigation Logo Width</th>
+                                <td>
+                                    <input type="number" name="nav_logo_width" value="<?php echo esc_attr($nav_logo_width); ?>" 
+                                           min="50" max="300" step="1" class="small-text"> px
+                                    <p class="description">Set the navigation logo width in pixels.</p>
+                                </td>
+                            </tr>
                             <tr>
                                 <th scope="row">Navigation Menu</th>
                                 <td>
@@ -1311,6 +1330,16 @@ class LLM_Prompts_Admin
                                         <?php endforeach; ?>
                                     </select>
                                     <p class="description">Select a WordPress menu to display in the navigation header. The menu will appear in the center of the navigation bar.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row">Hide Admin Bar for Administrators</th>
+                                <td>
+                                    <select name="hide_admin_bar_for_admins">
+                                        <option value="yes" <?php selected($hide_admin_bar_for_admins, 'yes'); ?>>Yes</option>
+                                        <option value="no" <?php selected($hide_admin_bar_for_admins, 'no'); ?>>No</option>
+                                    </select>
+                                    <p class="description">Choose whether to hide the WordPress admin bar for administrators on dashboard and prompt pages. Admin bar is always hidden for non-admin users.</p>
                                 </td>
                             </tr>
                         </table>
@@ -1413,16 +1442,33 @@ class LLM_Prompts_Admin
         $default_library = sanitize_text_field($_POST['default_library']);
         $custom_logo_url = esc_url_raw($_POST['custom_logo_url']);
         $logo_size = intval($_POST['logo_size']);
+        $nav_logo_height = intval($_POST['nav_logo_height']);
+        $nav_logo_width = intval($_POST['nav_logo_width']);
         $nav_menu = intval($_POST['nav_menu']);
+        $hide_admin_bar_for_admins = sanitize_text_field($_POST['hide_admin_bar_for_admins']);
         
         // Validate logo size
         if ($logo_size < 16) $logo_size = 16;
         if ($logo_size > 100) $logo_size = 100;
         
+        // Validate nav logo dimensions
+        if ($nav_logo_height < 16) $nav_logo_height = 16;
+        if ($nav_logo_height > 100) $nav_logo_height = 100;
+        if ($nav_logo_width < 50) $nav_logo_width = 50;
+        if ($nav_logo_width > 300) $nav_logo_width = 300;
+        
+        // Validate admin bar setting
+        if (!in_array($hide_admin_bar_for_admins, ['yes', 'no'])) {
+            $hide_admin_bar_for_admins = 'yes';
+        }
+        
         update_option('llm_default_library', $default_library);
         update_option('llm_custom_logo_url', $custom_logo_url);
         update_option('llm_logo_size', $logo_size);
+        update_option('llm_nav_logo_height', $nav_logo_height);
+        update_option('llm_nav_logo_width', $nav_logo_width);
         update_option('llm_nav_menu', $nav_menu);
+        update_option('llm_hide_admin_bar_for_admins', $hide_admin_bar_for_admins);
 
         wp_redirect(admin_url('admin.php?page=llm-default-settings&updated=true'));
         exit;

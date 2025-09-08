@@ -257,6 +257,12 @@ if (have_posts()) {
                 </a>
             </div>
         </div>
+        
+        <!-- Simple Footer -->
+        <div style="text-align: center; padding: 20px; color: black;">
+            <a href="https://cuadroacademy.com/privacy-policy" style="color: black; text-decoration: none;">Privacy Policy</a> | 
+            <a href="https://cuadroacademy.com/terms-conditions" style="color: black; text-decoration: none;">Terms & Conditions</a>
+        </div>
 
         <?php
     }
