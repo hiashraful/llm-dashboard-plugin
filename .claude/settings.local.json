@@ -29,7 +29,16 @@
       "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\templates/**)",
       "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\templates/**)",
       "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard/**)",
-      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\templates/**)"
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\templates/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\templates/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
+      "Read(//c/Users/Ashraf/Local Sites/plugin-development/app/public/**)"
     ],
     "deny": [],
     "ask": []

@@ -350,11 +350,6 @@ body.page-template-default {
     transition: all 0.3s ease;
 }
 
-.llm-login-form:hover {
-    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
-    transform: translateY(-2px);
-}
-
 .llm-login-form h2 {
     margin-bottom: 20px;
     color: #02062B;
@@ -371,41 +366,87 @@ body.page-template-default {
 }
 
 .llm-login-form input {
-    width: 100%;
-    padding: 15px 20px;
-    border: 1px solid #e0e0e0;
-    border-radius: 12px;
-    margin-bottom: 24px;
-    font-size: 16px;
-    font-family: 'Rubik', sans-serif;
-    box-sizing: border-box;
-    transition: all 0.3s ease;
+    width: 100% !important;
+    padding: 15px 20px !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 12px !important;
+    margin-bottom: 24px !important;
+    font-size: 16px !important;
+    font-family: 'Rubik', sans-serif !important;
+    box-sizing: border-box !important;
+    transition: all 0.3s ease !important;
 }
 
 .llm-login-form input:focus {
-    outline: none;
-    border-color: #2D2CFF;
-    box-shadow: 0 0 0 3px rgba(45, 44, 255, 0.1);
+    outline: none !important;
+    border-color: #2D2CFF !important;
+}
+
+.llm-password-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 24px;
+}
+
+.llm-password-wrapper input {
+    width: 100% !important;
+    padding: 15px 50px 15px 20px !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 12px !important;
+    font-size: 16px !important;
+    font-family: 'Rubik', sans-serif !important;
+    box-sizing: border-box !important;
+    transition: all 0.3s ease !important;
+    margin-bottom: 0 !important;
+}
+
+.llm-password-wrapper input:focus {
+    outline: none !important;
+    border-color: #2D2CFF !important;
+}
+
+.llm-password-toggle {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    padding: 5px;
+    color: #666;
+    transition: color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.llm-password-toggle:hover {
+    color: #2D2CFF;
+}
+
+.llm-password-toggle svg {
+    width: 20px;
+    height: 20px;
+    transition: color 0.2s ease;
 }
 
 .llm-login-form button {
-    width: 100%;
-    padding: 15px;
-    background: #2D2CFF;
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 600;
-    font-family: 'Rubik', sans-serif;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    width: 100% !important;
+    padding: 15px !important;
+    background: #2D2CFF !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    font-family: 'Rubik', sans-serif !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
 }
 
 .llm-login-form button:hover {
-    background: #1E1BFF;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(45, 44, 255, 0.3);
+    background: #1E1BFF !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 8px 20px rgba(45, 44, 255, 0.3) !important;
 }
 
 .llm-error {

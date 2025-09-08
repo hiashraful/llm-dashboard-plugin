@@ -3,7 +3,7 @@
  * Plugin Name: ACLAS Knowledge Hub
  * Plugin URI: https://www.devash.pro/
  * Description: A library of ready-to-use prompts for ChatGPT and other LLMs
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: Dev Ash
  * Author URI: https://www.devash.pro/
  */
@@ -27,6 +27,7 @@ class LLM_Prompts_Plugin
         add_filter('template_include', array($this, 'override_elementor_template'), 99);
         add_action('user_register', array($this, 'handle_new_user_registration'));
         add_action('set_user_role', array($this, 'handle_user_role_change'), 10, 3);
+        add_action('rest_api_init', array($this, 'register_api_endpoints'));
         register_activation_hook(__FILE__, array($this, 'activate'));
     }
 
@@ -111,7 +112,7 @@ class LLM_Prompts_Plugin
             $should_load = true;
         }
         
-        if ($post && has_shortcode($post->post_content, 'llm_prompts_dashboard')) {
+        if ($post && (has_shortcode($post->post_content, 'llm_prompts_dashboard') || has_shortcode($post->post_content, 'aclas_recent_prompts'))) {
             $should_load = true;
         }
         
@@ -251,6 +252,86 @@ class LLM_Prompts_Plugin
         }
         
         return $premium_libraries;
+    }
+
+    public function register_api_endpoints()
+    {
+        register_rest_route('llm/v1', '/seats-remaining', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'get_seats_remaining'),
+            'permission_callback' => '__return_true'
+        ));
+        
+        // Add CORS preflight support
+        register_rest_route('llm/v1', '/seats-remaining', array(
+            'methods' => 'OPTIONS',
+            'callback' => array($this, 'handle_preflight'),
+            'permission_callback' => '__return_true'
+        ));
+        
+        // Add action to handle CORS for all REST requests
+        add_action('rest_api_init', function() {
+            add_filter('rest_pre_serve_request', array($this, 'add_cors_headers'), 10, 4);
+        });
+    }
+
+    public function get_seats_remaining($request)
+    {
+        $override_limit = $request->get_param('limit');
+        $offer_limit = $override_limit ? intval($override_limit) : get_option('llm_special_offer_limit', 50);
+        
+        $special_students = get_users(array(
+            'meta_query' => array(
+                array(
+                    'key'     => '_llm_special_offer_student',
+                    'value'   => 'yes',
+                    'compare' => '='
+                )
+            ),
+            'fields' => 'ID',
+            'count_total' => true
+        ));
+        
+        $current_count = count($special_students);
+        $remaining = max(0, $offer_limit - $current_count);
+        $percentage_filled = $offer_limit > 0 ? round(($current_count / $offer_limit) * 100, 2) : 0;
+        
+        $status = 'available';
+        if ($remaining <= 10) {
+            $status = 'urgent';
+        } elseif ($remaining <= 50) {
+            $status = 'low';
+        }
+        
+        $response = array(
+            'total_limit' => $offer_limit,
+            'current_count' => $current_count,
+            'remaining' => $remaining,
+            'percentage_filled' => $percentage_filled,
+            'status' => $status,
+            'last_updated' => current_time('c')
+        );
+        
+        $response = rest_ensure_response($response);
+        return $response;
+    }
+
+    public function handle_preflight()
+    {
+        return new WP_REST_Response(null, 200);
+    }
+
+    public function add_cors_headers($served, $result, $request, $server)
+    {
+        // Only add CORS headers for our API endpoints
+        if (strpos($request->get_route(), '/llm/v1/') === 0) {
+            header('Access-Control-Allow-Origin: *');
+            header('Access-Control-Allow-Methods: GET, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type, X-Requested-With');
+            header('Access-Control-Allow-Credentials: false');
+            header('Access-Control-Max-Age: 86400');
+        }
+        return $served;
     }
 }
 

@@ -8,8 +8,9 @@ function check_prompt_access()
     }
 
     $user = wp_get_current_user();
+    $current_user_id = get_current_user_id();
 
-    // Admin bypass
+    // Admin bypass - full access
     if (user_can($user, 'manage_options')) {
         return 'access_granted';
     }
@@ -19,10 +20,14 @@ function check_prompt_access()
         return 'invalid_role';
     }
 
-    // Check the verification cookie
+    // Special students get direct access (like dashboard)
+    if (user_can($user, 'academy_student') && LLM_Prompts_Plugin::is_special_offer_student($current_user_id)) {
+        return 'access_granted';
+    }
+
+    // Regular students: Check the verification cookie (must have accessed dashboard first)
     $expected_cookie_value = wp_hash(get_option('llm_dashboard_password', '') . $user->ID);
     $actual_cookie_value = isset($_COOKIE['llm_code_verified']) ? $_COOKIE['llm_code_verified'] : '';
-
 
     if ($expected_cookie_value === $actual_cookie_value) {
         return 'access_granted';
@@ -34,7 +39,10 @@ function check_prompt_access()
 $access_status = check_prompt_access();
 
 if ($access_status !== 'access_granted') {
-    // Redirect to dashboard for login/access code entry
+    // Redirect to dashboard for appropriate handling:
+    // - not_logged_in: will show WordPress login
+    // - invalid_role: will show access denied (if we implement it)
+    // - code_required: will show code entry form or dashboard access
     $dashboard_url = home_url('/aclas-knowledge-hub/');
     wp_redirect($dashboard_url);
     exit;

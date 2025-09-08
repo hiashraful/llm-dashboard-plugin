@@ -15,6 +15,10 @@ class LLM_Prompts_Ajax
         add_action('wp_ajax_nopriv_load_more_prompts', array($this, 'load_more_prompts'));
         add_action('wp_ajax_verify_access_code', array($this, 'verify_access_code'));
         add_action('wp_ajax_nopriv_verify_access_code', array($this, 'verify_access_code'));
+        add_action('wp_ajax_llm_set_auth_cookie', array($this, 'set_auth_cookie'));
+        add_action('wp_ajax_nopriv_llm_set_auth_cookie', array($this, 'set_auth_cookie'));
+        add_action('wp_ajax_llm_logout', array($this, 'handle_logout'));
+        add_action('wp_ajax_nopriv_llm_logout', array($this, 'handle_logout'));
     }
 
     public function verify_access_code()
@@ -43,6 +47,59 @@ class LLM_Prompts_Ajax
         } else {
             wp_send_json_error(array('message' => 'Invalid access code'));
         }
+    }
+
+    public function set_auth_cookie()
+    {
+        if (!wp_verify_nonce($_POST['nonce'], 'llm_set_auth_cookie')) {
+            wp_send_json_error(array('message' => 'Security check failed'));
+            return;
+        }
+
+        $user_id = intval($_POST['user_id']);
+        
+        if (!$user_id || !get_userdata($user_id)) {
+            wp_send_json_error(array('message' => 'Invalid user'));
+            return;
+        }
+
+        // Set authentication cookies
+        wp_set_current_user($user_id);
+        wp_set_auth_cookie($user_id, true);
+        
+        wp_send_json_success(array('message' => 'Authentication set'));
+    }
+
+    public function handle_logout()
+    {
+        // Clear the access code cookie with proper domain settings
+        setcookie('llm_code_verified', '', time() - 3600, COOKIEPATH, COOKIE_DOMAIN, false, true);
+        
+        // Also try clearing with root path and various domain combinations
+        setcookie('llm_code_verified', '', time() - 3600, '/', '', false, true);
+        setcookie('llm_code_verified', '', time() - 3600, '/', COOKIE_DOMAIN, false, true);
+        
+        // Clear WordPress auth cookies with different paths and domains
+        wp_clear_auth_cookie();
+        wp_set_current_user(0);
+        
+        // Also manually clear WordPress auth cookies
+        setcookie(LOGGED_IN_COOKIE, '', time() - 3600, COOKIEPATH, COOKIE_DOMAIN, false, true);
+        setcookie(LOGGED_IN_COOKIE, '', time() - 3600, '/', '', false, true);
+        setcookie(AUTH_COOKIE, '', time() - 3600, COOKIEPATH, COOKIE_DOMAIN, false, true);
+        setcookie(AUTH_COOKIE, '', time() - 3600, '/', '', false, true);
+        setcookie(SECURE_AUTH_COOKIE, '', time() - 3600, COOKIEPATH, COOKIE_DOMAIN, false, true);
+        setcookie(SECURE_AUTH_COOKIE, '', time() - 3600, '/', '', false, true);
+        
+        // Destroy session if exists
+        if (session_id()) {
+            session_destroy();
+        }
+        
+        // Clear any PHP session data
+        $_SESSION = array();
+        
+        wp_send_json_success(array('message' => 'Logged out successfully'));
     }
 
     public function filter_prompts()

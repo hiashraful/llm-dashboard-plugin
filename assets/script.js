@@ -401,4 +401,36 @@ jQuery(document).ready(function($) {
     // Initialize mobile menu
     initializeMobileMenu();
 
+    // Global logout function
+    window.llmLogout = function() {
+        $.post(llm_ajax.ajax_url, {
+            action: 'llm_logout'
+        }).always(function() {
+            // Simple redirect to clean page
+            window.location.href = window.location.pathname;
+        });
+    };
+
+    // Global password toggle function
+    window.togglePassword = function() {
+        const passwordInput = document.getElementById('user_password');
+        const eyeOpen = document.querySelector('.eye-open');
+        const eyeClosed = document.querySelector('.eye-closed');
+        
+        if (passwordInput && eyeOpen && eyeClosed) {
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeOpen.style.display = 'none';
+                eyeClosed.style.display = 'block';
+            } else {
+                passwordInput.type = 'password';
+                eyeOpen.style.display = 'block';
+                eyeClosed.style.display = 'none';
+            }
+            
+            // Keep focus on input after toggle
+            passwordInput.focus();
+        }
+    };
+
 });
