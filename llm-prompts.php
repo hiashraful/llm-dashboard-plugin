@@ -3,7 +3,7 @@
  * Plugin Name: ACLAS Knowledge Hub
  * Plugin URI: https://www.devash.pro/
  * Description: A library of ready-to-use prompts for ChatGPT and other LLMs
- * Version: 1.5.3
+ * Version: 1.5.4
  * Author: Dev Ash
  * Author URI: https://www.devash.pro/
  */
@@ -210,6 +210,12 @@ class LLM_Prompts_Plugin
 
         $user = get_userdata($user_id);
         if (!$user) {
+            return;
+        }
+
+        // Check if user is from GHL - only GHL users can be special students
+        $is_ghl_user = get_user_meta($user_id, 'registration_source', true) === 'ghl';
+        if (!$is_ghl_user) {
             return;
         }
 
