@@ -36,8 +36,8 @@ class LLM_Prompts_Admin
     public function add_admin_menu()
     {
         add_menu_page(
-            'Knowledge Hub',
-            'Knowledge Hub',
+            'Libreria Digitale',
+            'Libreria Digitale',
             'manage_options',
             'llm-dashboard-admin',
             array($this, 'dashboard_page'),
@@ -90,8 +90,8 @@ class LLM_Prompts_Admin
 
         add_submenu_page(
             'llm-dashboard-admin',
-            'Libraries',
-            'Libraries',
+            'Librerie',
+            'Librerie',
             'manage_options',
             'edit-tags.php?taxonomy=llm_library&post_type=llm_prompt'
         );
@@ -123,8 +123,8 @@ class LLM_Prompts_Admin
 
         add_submenu_page(
             'llm-dashboard-admin',
-            'Premium Libraries',
-            'Premium Libraries',
+            'Librerie Premium',
+            'Librerie Premium',
             'manage_options',
             'llm-premium-libraries',
             array($this, 'premium_libraries_page')
@@ -155,7 +155,7 @@ class LLM_Prompts_Admin
             <div class="llm-header">
                 <div class="llm-header-container">
                     <div class="llm-header-content">
-                        <h1 class="llm-header-title">ACLAS Knowledge Hub</h1>
+                        <h1 class="llm-header-title">LIBRERIA DIGITALE</h1>
                         <div class="llm-header-actions">
                             <a href="<?php echo admin_url('post-new.php?post_type=llm_prompt'); ?>" class="llm-add-button">
                                 <svg class="llm-add-button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,7 +188,7 @@ class LLM_Prompts_Admin
                     <div class="llm-stat-card">
                         <div class="llm-stat-card-content">
                             <div class="llm-stat-card-info">
-                                <h3>Libraries</h3>
+                                <h3>Librerie</h3>
                                 <p><?php echo $library_count; ?></p>
                             </div>
                             <div class="llm-stat-card-icon">
@@ -234,7 +234,7 @@ class LLM_Prompts_Admin
                 <div class="llm-content-grid">
                     <div class="llm-section-card">
                         <div class="llm-section-header">
-                            <h2 class="llm-section-title">Libraries</h2>
+                            <h2 class="llm-section-title">Librerie</h2>
                             <a href="<?php echo admin_url('edit-tags.php?taxonomy=llm_library&post_type=llm_prompt'); ?>"
                                 class="llm-section-link">View all</a>
                         </div>
@@ -503,7 +503,15 @@ class LLM_Prompts_Admin
             $existing_post = null;
 
             if ($import_mode === 'update') {
-                $existing_post = get_page_by_title($prompt_data['title'], OBJECT, 'llm_prompt');
+                $query = new WP_Query(array(
+                    'title' => $prompt_data['title'],
+                    'post_type' => 'llm_prompt',
+                    'post_status' => 'any',
+                    'posts_per_page' => 1,
+                    'fields' => 'ids'
+                ));
+                $existing_post = $query->posts ? get_post($query->posts[0]) : null;
+                wp_reset_postdata();
             }
 
             if ($existing_post && $import_mode === 'update') {
@@ -988,7 +996,7 @@ class LLM_Prompts_Admin
 
         ?>
         <div class="wrap">
-            <h1>Premium Libraries Management</h1>
+            <h1>Gestione Librerie Premium</h1>
             <p>Configure which libraries require premium access. Premium libraries will show a "Coming Soon" message to non-premium users.</p>
             
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
@@ -1066,7 +1074,7 @@ class LLM_Prompts_Admin
                                 <td>
                                     <textarea name="premium_message" 
                                               rows="4" 
-                                              class="large-text"><?php echo esc_textarea(get_option('llm_premium_message', "⭐ Coming Soon!\n\nThis premium library is currently under development and will be available soon with exclusive high-quality prompts.")); ?></textarea>
+                                              class="large-text"><?php echo esc_textarea(get_option('llm_premium_message', "⭐ Prossimamente!\n\nQuesta libreria premium è attualmente in fase di sviluppo e sarà disponibile presto con prompt esclusivi di alta qualità.")); ?></textarea>
                                     <p class="description">Message shown to users when they select a premium library.</p>
                                 </td>
                             </tr>
@@ -1350,7 +1358,7 @@ class LLM_Prompts_Admin
                                 <th scope="row">Default Library</th>
                                 <td>
                                     <select name="default_library" class="regular-text">
-                                        <option value="">No Default (Show All Libraries)</option>
+                                        <option value="">Nessuna Predefinita (Mostra Tutte le Librerie)</option>
                                         <?php foreach ($libraries as $library): ?>
                                             <option value="<?php echo $library->term_id; ?>" 
                                                     <?php selected($default_library_id, $library->term_id); ?>>
@@ -1376,7 +1384,7 @@ class LLM_Prompts_Admin
                         <?php foreach ($libraries as $library): ?>
                             <li style="margin-bottom: 8px;">
                                 <strong><?php echo esc_html($library->name); ?>:</strong><br>
-                                <code><?php echo home_url('/aclas-knowledge-hub/?library=' . $library->slug); ?></code>
+                                <code><?php echo home_url('/libreria-digitale/?library=' . $library->slug); ?></code>
                             </li>
                         <?php endforeach; ?>
                     </ul>

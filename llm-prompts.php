@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: ACLAS Knowledge Hub
+ * Plugin Name: LIBRERIA DIGITALE
  * Plugin URI: https://www.devash.pro/
  * Description: A library of ready-to-use prompts for ChatGPT and other LLMs
- * Version: 1.5.4
+ * Version: 2.0.7
  * Author: Dev Ash
  * Author URI: https://www.devash.pro/
  */
@@ -25,10 +25,15 @@ class LLM_Prompts_Plugin
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_filter('single_template', array($this, 'load_single_template'));
         add_filter('template_include', array($this, 'override_elementor_template'), 99);
+        add_filter('template_include', array($this, 'load_account_template'));
         add_action('user_register', array($this, 'handle_new_user_registration'));
         add_action('set_user_role', array($this, 'handle_user_role_change'), 10, 3);
         add_action('rest_api_init', array($this, 'register_api_endpoints'));
         add_action('wp', array($this, 'hide_admin_bar_on_dashboard_pages'));
+        add_action('init', array($this, 'add_rewrite_rules'));
+        add_action('parse_request', array($this, 'parse_custom_urls'));
+        add_filter('post_type_link', array($this, 'custom_prompt_permalink'), 10, 2);
+        add_action('template_redirect', array($this, 'redirect_old_urls'));
         register_activation_hook(__FILE__, array($this, 'activate'));
     }
 
@@ -58,7 +63,8 @@ class LLM_Prompts_Plugin
             'has_archive' => true,
             'supports' => array('title', 'editor', 'thumbnail', 'custom-fields'),
             'menu_icon' => 'dashicons-format-chat',
-            'show_in_menu' => false
+            'show_in_menu' => false,
+            'rewrite' => false
         ));
     }
 
@@ -66,7 +72,7 @@ class LLM_Prompts_Plugin
     {
         register_taxonomy('llm_library', 'llm_prompt', array(
             'labels' => array(
-                'name' => 'Libraries',
+                'name' => 'Librerie',
                 'singular_name' => 'Library'
             ),
             'hierarchical' => false,
@@ -109,7 +115,7 @@ class LLM_Prompts_Plugin
         
         $should_load = false;
         
-        if (is_page('aclas-knowledge-hub') || is_singular('llm_prompt')) {
+        if (is_page('libreria-digitale') || is_page('libreria-digitale-account') || is_singular('llm_prompt')) {
             $should_load = true;
         }
         
@@ -147,15 +153,26 @@ class LLM_Prompts_Plugin
     {
         $this->register_post_types();
         $this->register_taxonomies();
+        $this->add_rewrite_rules();
         flush_rewrite_rules();
 
-        if (!get_page_by_path('aclas-knowledge-hub')) {
+        if (!get_page_by_path('libreria-digitale')) {
             wp_insert_post(array(
-                'post_title' => 'ACLAS Knowledge Hub',
-                'post_name' => 'aclas-knowledge-hub',
+                'post_title' => 'LIBRERIA DIGITALE',
+                'post_name' => 'libreria-digitale',
                 'post_status' => 'publish',
                 'post_type' => 'page',
                 'post_content' => '[llm_prompts_dashboard]'
+            ));
+        }
+        
+        if (!get_page_by_path('libreria-digitale-account')) {
+            wp_insert_post(array(
+                'post_title' => 'Libreria Digitale Account',
+                'post_name' => 'libreria-digitale-account',
+                'post_status' => 'publish',
+                'post_type' => 'page',
+                'post_content' => ''
             ));
         }
     }
@@ -175,6 +192,17 @@ class LLM_Prompts_Plugin
     {
         if (is_singular('llm_prompt')) {
             $plugin_template = LLM_PROMPTS_PATH . 'templates/single-llm_prompt.php';
+            if (file_exists($plugin_template)) {
+                return $plugin_template;
+            }
+        }
+        return $template;
+    }
+
+    public function load_account_template($template)
+    {
+        if (is_page('libreria-digitale-account')) {
+            $plugin_template = LLM_PROMPTS_PATH . 'templates/libreria-digitale-account.php';
             if (file_exists($plugin_template)) {
                 return $plugin_template;
             }
@@ -250,7 +278,14 @@ class LLM_Prompts_Plugin
 
     public static function is_special_offer_student($user_id)
     {
-        return get_user_meta($user_id, '_llm_special_offer_student', true) === 'yes';
+        // Check if explicitly marked as special offer student
+        if (get_user_meta($user_id, '_llm_special_offer_student', true) === 'yes') {
+            return true;
+        }
+        
+        // Check if user is from GHL - GHL users are considered special offer students
+        $registration_source = get_user_meta($user_id, 'registration_source', true);
+        return $registration_source === 'ghl';
     }
 
     public static function is_premium_library($library_id)
@@ -363,7 +398,13 @@ class LLM_Prompts_Plugin
         }
         
         // Check if we're on the dashboard page (contains llm_prompts_dashboard shortcode)
-        if (is_page('aclas-knowledge-hub')) {
+        if (is_page('libreria-digitale')) {
+            show_admin_bar(false);
+            return;
+        }
+        
+        // Check if we're on the account page
+        if (is_page('libreria-digitale-account')) {
             show_admin_bar(false);
             return;
         }
@@ -379,6 +420,83 @@ class LLM_Prompts_Plugin
         if ($post && has_shortcode($post->post_content, 'llm_prompts_dashboard')) {
             show_admin_bar(false);
             return;
+        }
+    }
+
+    public function add_rewrite_rules()
+    {
+        add_rewrite_tag('%library_slug%', '([^&]+)');
+        add_rewrite_tag('%prompt_slug%', '([^&]+)');
+        add_rewrite_rule('^([^/]+)/([^/]+)/?$', 'index.php?library_slug=$matches[1]&prompt_slug=$matches[2]', 'top');
+    }
+
+    public function parse_custom_urls($wp)
+    {
+        if (isset($wp->query_vars['library_slug']) && isset($wp->query_vars['prompt_slug'])) {
+            $library_slug = sanitize_text_field($wp->query_vars['library_slug']);
+            $prompt_slug = sanitize_text_field($wp->query_vars['prompt_slug']);
+
+            // Check if library exists
+            $library = get_term_by('slug', $library_slug, 'llm_library');
+            if (!$library) {
+                return;
+            }
+
+            // Find prompt by slug that belongs to this library
+            $args = array(
+                'name' => $prompt_slug,
+                'post_type' => 'llm_prompt',
+                'post_status' => 'publish',
+                'numberposts' => 1,
+                'tax_query' => array(
+                    array(
+                        'taxonomy' => 'llm_library',
+                        'field' => 'term_id',
+                        'terms' => $library->term_id,
+                    ),
+                ),
+            );
+
+            $posts = get_posts($args);
+            if ($posts) {
+                $wp->query_vars['post_type'] = 'llm_prompt';
+                $wp->query_vars['name'] = $prompt_slug;
+                unset($wp->query_vars['library_slug']);
+                unset($wp->query_vars['prompt_slug']);
+            }
+        }
+    }
+
+    public function custom_prompt_permalink($permalink, $post)
+    {
+        if ($post->post_type !== 'llm_prompt') {
+            return $permalink;
+        }
+
+        $libraries = get_the_terms($post->ID, 'llm_library');
+        if ($libraries && !is_wp_error($libraries)) {
+            $library = reset($libraries);
+            return home_url('/' . $library->slug . '/' . $post->post_name . '/');
+        }
+
+        return home_url('/llm_prompt/' . $post->post_name . '/');
+    }
+
+    public function redirect_old_urls()
+    {
+        if (is_singular('llm_prompt')) {
+            global $post;
+            $current_url = $_SERVER['REQUEST_URI'];
+            
+            if (strpos($current_url, '/llm_prompt/') !== false) {
+                $libraries = get_the_terms($post->ID, 'llm_library');
+                if ($libraries && !is_wp_error($libraries)) {
+                    $library = reset($libraries);
+                    $new_url = home_url('/' . $library->slug . '/' . $post->post_name . '/');
+                    wp_redirect($new_url, 301);
+                    exit;
+                }
+            }
         }
     }
 }

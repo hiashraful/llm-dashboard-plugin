@@ -65,7 +65,7 @@ class LLM_Prompts_Frontend
 
             // Check if user has required role
             if (!user_can($user, 'academy_student') && !user_can($user, 'manage_options')) {
-                $this->login_error = 'You don\'t have permission to access the Knowledge Hub.';
+                $this->login_error = 'Non hai il permesso di accedere alla Libreria Digitale.';
                 $this->increment_login_attempts($transient_key);
                 return;
             }
@@ -231,11 +231,11 @@ class LLM_Prompts_Frontend
         ?>
         <div class="llm-login-container">
             <div class="llm-login-form">
-                <h2>Access Denied</h2>
-                <p>You don't have permission to access the ACLAS Knowledge Hub. This area is restricted to Academy students
-                    only.</p>
-                <p>If you believe this is an error, please contact support.</p>
-                <a href="<?php echo home_url(); ?>" class="llm-wp-login-btn">Go to Homepage</a>
+                <h2>Accesso Negato</h2>
+                <p>Non hai il permesso di accedere alla LIBRERIA DIGITALE. Quest'area è riservata solo agli studenti
+                    dell'Accademia.</p>
+                <p>Se ritieni che si tratti di un errore, contatta il supporto.</p>
+                <a href="<?php echo home_url(); ?>" class="llm-wp-login-btn">Vai alla Homepage</a>
             </div>
         </div>
         <?php
@@ -248,8 +248,8 @@ class LLM_Prompts_Frontend
         ?>
         <div class="llm-login-container">
             <div class="llm-login-form">
-                <h2>ACLAS Knowledge Hub</h2>
-                <p>Please log in to access the knowledge hub.</p>
+                <h2>LIBRERIA DIGITALE</h2>
+                <p>Accedi ora alla Libreria Digitale.</p>
                 
                 <?php if (!empty($this->login_error)): ?>
                     <div class="llm-error" style="margin-bottom: 20px; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; color: #c33;">
@@ -323,23 +323,23 @@ class LLM_Prompts_Frontend
         ?>
         <div class="llm-login-container">
             <div class="llm-login-form">
-                <h2>ACLAS Knowledge Hub</h2>
-                <p>Welcome, <?php echo wp_get_current_user()->display_name; ?>!</p>
+                <h2>LIBRERIA DIGITALE</h2>
+                <p>Benvenuto, <?php echo wp_get_current_user()->display_name; ?>!</p>
 
                 <?php if ($is_academy_student && !$is_special_student): ?>
                     <div class="llm-info-box">
-                        <h3>Academy Student</h3>
-                        <p>You're an Academy student, but not eligible for the special offer. Please enter the access code to
-                            continue.</p>
+                        <h3>Studente dell'Accademia</h3>
+                        <p>Sei uno studente dell'Accademia, ma non sei idoneo per l'offerta speciale. Inserisci il codice di accesso per
+                            continuare.</p>
                     </div>
                 <?php endif; ?>
 
                 <form method="post">
-                    <input type="text" name="llm_access_code" placeholder="Access Code" required>
-                    <button type="submit">Access Dashboard</button>
+                    <input type="text" name="llm_access_code" placeholder="Codice di Accesso" required>
+                    <button type="submit">Accedi alla Dashboard</button>
                 </form>
                 <?php if (isset($_POST['llm_access_code'])): ?>
-                    <div class="llm-error">Incorrect access code. Please try again.</div>
+                    <div class="llm-error">Codice di accesso errato. Riprova.</div>
                 <?php endif; ?>
             </div>
         </div>
@@ -383,7 +383,7 @@ class LLM_Prompts_Frontend
         }
 
         // Determine header title
-        $header_title = $selected_library ? $selected_library->name : 'ACLAS Knowledge Hub';
+        $header_title = $selected_library ? $selected_library->name : 'LIBRERIA DIGITALE';
 
         ob_start();
         ?>
@@ -653,7 +653,7 @@ class LLM_Prompts_Frontend
 
                         <div class="llm-premium-message">
                             <?php
-                            $premium_message = get_option('llm_premium_message', "⭐ Coming Soon!\n\nThis premium library is currently under development and will be available soon with exclusive high-quality prompts.");
+                            $premium_message = get_option('llm_premium_message', "⭐ Prossimamente!\n\nQuesta libreria premium è attualmente in fase di sviluppo e sarà disponibile presto con prompt esclusivi di alta qualità.");
                             echo nl2br(esc_html($premium_message));
                             ?>
                         </div>
@@ -670,7 +670,7 @@ class LLM_Prompts_Frontend
                             <?php endif; ?>
 
                             <button id="llm-back-to-dashboard" class="llm-back-button">
-                                ← Back to Libraries
+                                ← Torna alle Librerie
                             </button>
                         </div>
                     </div>

@@ -280,7 +280,7 @@ jQuery(document).ready(function($) {
         if (libraryId && libraryName) {
             $('.llm-header h1').text(libraryName);
         } else {
-            $('.llm-header h1').text('ACLAS Knowledge Hub');
+            $('.llm-header h1').text('LIBRERIA DIGITALE');
         }
         
         // Update the URL without page reload

@@ -38,7 +38,9 @@
       "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
       "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
       "Read(/C:\\Users\\Ashraf\\Local Sites\\plugin-development\\app\\public\\wp-content\\plugins\\llm-dashboard\\includes/**)",
-      "Read(//c/Users/Ashraf/Local Sites/plugin-development/app/public/**)"
+      "Read(//c/Users/Ashraf/Local Sites/plugin-development/app/public/**)",
+      "Bash(wp rewrite flush:*)",
+      "Bash(php:*)"
     ],
     "deny": [],
     "ask": []

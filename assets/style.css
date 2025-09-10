@@ -9,7 +9,7 @@
 /* Navigation Header Styles */
 .llm-nav-header {
     position: fixed;
-    top: 10px;
+    top: 10px !important;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
@@ -47,7 +47,7 @@
 
 .llm-nav-logo {
     height: var(--llm-nav-logo-height, 32px);
-    width: var(--llm-nav-logo-width, 120px);
+    width: var(--llm-nav-logo-width, 60px);
     object-fit: contain;
     padding: 4px;
 }
@@ -530,7 +530,7 @@ body.page-template-default {
     background-color: #fff;
     border-radius: 25px;
     border: 2px solid #02062B1A;
-    height: calc(85vh - 40px);
+    height: calc(85vh - 40px) !important;
     padding: 20px;
     box-sizing: border-box;
     display: flex;
@@ -860,7 +860,7 @@ body.page-template-default {
 .llm-content {
     flex: 1;
     min-width: 900px;
-    height: calc(85vh - 40px);
+    height: calc(85vh - 40px) !important;
     overflow-y: auto;
     padding-left: 20px;
 }

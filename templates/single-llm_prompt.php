@@ -43,7 +43,7 @@ if ($access_status !== 'access_granted') {
     // - not_logged_in: will show WordPress login
     // - invalid_role: will show access denied (if we implement it)
     // - code_required: will show code entry form or dashboard access
-    $dashboard_url = home_url('/aclas-knowledge-hub/');
+    $dashboard_url = home_url('/libreria-digitale/');
     wp_redirect($dashboard_url);
     exit;
 }
@@ -252,8 +252,8 @@ if (have_posts()) {
                         </div>
                     <?php endif; ?>
                 </div>
-                <a href="<?php echo home_url('/aclas-knowledge-hub/'); ?>" class="llm-back-button">
-                    ← Back to Dashboard
+                <a href="<?php echo home_url('/libreria-digitale/'); ?>" class="llm-back-button">
+                    ← Torna alla Dashboard
                 </a>
             </div>
         </div>
