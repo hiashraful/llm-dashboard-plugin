@@ -10,13 +10,178 @@ class LLM_Prompts_Frontend
     private $login_error = '';
     private $login_success = false;
     private $login_user_id = 0;
+    private $forgot_password_error = '';
+    private $forgot_password_success = false;
+    private $show_forgot_password = false;
 
     public function __construct()
     {
         add_shortcode('llm_prompts_dashboard', array($this, 'dashboard_shortcode'));
         add_shortcode('aclas_recent_prompts', array($this, 'recent_prompts_shortcode'));
+        add_shortcode('llm_password_reset', array($this, 'password_reset_shortcode'));
         add_action('init', array($this, 'handle_access_code'));
         add_action('init', array($this, 'handle_custom_logout'));
+        add_action('init', array($this, 'handle_forgot_password'));
+    }
+    
+
+    public function handle_forgot_password()
+    {
+        // Handle forgot password form submission
+        if (isset($_POST['llm_forgot_password_submit']) && isset($_POST['llm_forgot_password_nonce'])) {
+            // Verify nonce for security
+            if (!wp_verify_nonce($_POST['llm_forgot_password_nonce'], 'llm_forgot_password')) {
+                $this->forgot_password_error = 'Controllo di sicurezza fallito. Riprova.';
+                return;
+            }
+
+            // Rate limiting check
+            $ip = $_SERVER['REMOTE_ADDR'];
+            $transient_key = 'llm_forgot_password_attempts_' . md5($ip);
+            $attempts = get_transient($transient_key);
+            
+            if ($attempts && $attempts >= 3) {
+                $this->forgot_password_error = 'Troppi tentativi di reset. Aspetta 15 minuti prima di riprovare.';
+                return;
+            }
+
+            $email = sanitize_email($_POST['user_email']);
+
+            if (empty($email)) {
+                $this->forgot_password_error = 'Inserisci il tuo indirizzo email.';
+                $this->increment_forgot_password_attempts($transient_key);
+                return;
+            }
+
+            if (!is_email($email)) {
+                $this->forgot_password_error = 'Inserisci un indirizzo email valido.';
+                $this->increment_forgot_password_attempts($transient_key);
+                return;
+            }
+
+            // Check if user exists
+            $user = get_user_by('email', $email);
+            if (!$user) {
+                $this->forgot_password_error = 'Nessun account trovato con questo indirizzo email.';
+                $this->increment_forgot_password_attempts($transient_key);
+                return;
+            }
+
+            // Check if user has required role
+            if (!user_can($user, 'academy_student') && !user_can($user, 'manage_options')) {
+                $this->forgot_password_error = 'Questa email non è associata a un account della libreria.';
+                $this->increment_forgot_password_attempts($transient_key);
+                return;
+            }
+
+            // Generate password reset key
+            $reset_key = wp_generate_password(20, false);
+            update_user_meta($user->ID, 'llm_password_reset_key', array(
+                'key' => wp_hash($reset_key),
+                'time' => current_time('timestamp')
+            ));
+
+            // Send password reset email
+            $current_site_url = (is_ssl() ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'];
+            $reset_link = add_query_arg(array(
+                'llm_action' => 'reset',
+                'llm_key' => $reset_key,
+                'llm_user' => rawurlencode($user->user_login)
+            ), $current_site_url . '/libreria-digitale-access-recovery/');
+
+            $subject = 'Reimposta la tua password - LIBRERIA DIGITALE';
+            $message = "Ciao {$user->display_name},\n\n";
+            $message .= "Hai richiesto il reset della password per il tuo account LIBRERIA DIGITALE.\n\n";
+            $message .= "Clicca sul link qui sotto per reimpostare la tua password:\n";
+            $message .= $reset_link . "\n\n";
+            $message .= "Questo link scadrà tra 1 ora.\n\n";
+            $message .= "Se non hai richiesto questo reset, ignora questa email.\n\n";
+            $message .= "Cordiali saluti,\nTeam LIBRERIA DIGITALE";
+
+            $headers = array('Content-Type: text/plain; charset=UTF-8');
+            
+            if (wp_mail($email, $subject, $message, $headers)) {
+                // Clear failed attempts on successful email send
+                delete_transient($transient_key);
+                $this->forgot_password_success = true;
+            } else {
+                $this->forgot_password_error = 'Impossibile inviare l\'email di reset. Riprova più tardi.';
+                $this->increment_forgot_password_attempts($transient_key);
+            }
+        }
+
+        // Handle password reset form submission
+        if (isset($_GET['action']) && $_GET['action'] === 'reset_password' && isset($_GET['key']) && isset($_GET['login'])) {
+            $this->show_forgot_password = 'reset_form';
+        }
+
+        // Handle new password submission
+        if (isset($_POST['llm_reset_password_submit']) && isset($_POST['llm_reset_password_nonce'])) {
+            if (!wp_verify_nonce($_POST['llm_reset_password_nonce'], 'llm_reset_password')) {
+                $this->forgot_password_error = 'Controllo di sicurezza fallito. Riprova.';
+                return;
+            }
+
+            $key = sanitize_text_field($_POST['reset_key']);
+            $login = sanitize_text_field($_POST['user_login']);
+            
+            $new_password = sanitize_text_field($_POST['new_password']);
+            $confirm_password = sanitize_text_field($_POST['confirm_password']);
+
+            if (empty($new_password) || empty($confirm_password)) {
+                $this->forgot_password_error = 'Compila entrambi i campi password.';
+                return;
+            }
+
+            if (strlen($new_password) < 8) {
+                $this->forgot_password_error = 'La password deve essere di almeno 8 caratteri.';
+                return;
+            }
+
+            if ($new_password !== $confirm_password) {
+                $this->forgot_password_error = 'Le password non coincidono.';
+                return;
+            }
+
+            // Get user and verify reset key
+            $user = get_user_by('login', $login);
+            if (!$user) {
+                $this->forgot_password_error = 'Link di reset non valido.';
+                return;
+            }
+
+            $stored_data = get_user_meta($user->ID, 'llm_password_reset_key', true);
+            if (!$stored_data || !is_array($stored_data)) {
+                $this->forgot_password_error = 'Link di reset non valido o scaduto.';
+                return;
+            }
+
+            // Check if key matches and hasn't expired (1 hour)
+            if ($stored_data['key'] !== wp_hash($key) || (current_time('timestamp') - $stored_data['time']) > 3600) {
+                $this->forgot_password_error = 'Link di reset non valido o scaduto.';
+                delete_user_meta($user->ID, 'llm_password_reset_key');
+                return;
+            }
+
+            // Reset password
+            wp_set_password($new_password, $user->ID);
+            delete_user_meta($user->ID, 'llm_password_reset_key');
+            
+            $this->forgot_password_success = 'password_reset';
+        }
+
+        // Show forgot password form if requested
+        if (isset($_GET['action']) && $_GET['action'] === 'forgot_password') {
+            $this->show_forgot_password = 'email_form';
+        }
+        
+    }
+
+    private function increment_forgot_password_attempts($transient_key)
+    {
+        $attempts = get_transient($transient_key) ?: 0;
+        $attempts++;
+        set_transient($transient_key, $attempts, 15 * MINUTE_IN_SECONDS);
     }
 
     public function process_login_form()
@@ -97,7 +262,7 @@ class LLM_Prompts_Frontend
                 jQuery.post("' . admin_url('admin-ajax.php') . '", {
                     action: "llm_logout"
                 }).always(function() {
-                    window.location.href = "' . remove_query_arg('llm_logout', get_permalink()) . '";
+                    window.location.href = "' . remove_query_arg('llm_logout', home_url('/libreria-digitale/')) . '";
                 });
             </script>';
             exit;
@@ -125,6 +290,9 @@ class LLM_Prompts_Frontend
     {
         // Process login form if submitted (do this first)
         $this->process_login_form();
+        
+        // Process forgot password form if submitted or requested
+        $this->handle_forgot_password();
 
         wp_enqueue_style('llm-prompts-style', LLM_PROMPTS_URL . 'assets/style.css', array(), '1.0.19');
         wp_enqueue_script('llm-prompts-script', LLM_PROMPTS_URL . 'assets/script.js', array('jquery'), '1.0.19', true);
@@ -178,7 +346,7 @@ class LLM_Prompts_Frontend
         wp_localize_script('llm-prompts-script', 'llm_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('llm_prompts_nonce'),
-            'logout_url' => add_query_arg('llm_logout', '1', get_permalink()),
+            'logout_url' => add_query_arg('llm_logout', '1', home_url('/libreria-digitale/')),
             'premium_libraries' => $premium_library_ids,
             'selected_library' => $selected_library ? $selected_library->term_id : '',
             'default_library' => $default_library_id,
@@ -186,6 +354,12 @@ class LLM_Prompts_Frontend
         ));
 
         if (!is_user_logged_in()) {
+            // Check if we should show forgot password form
+            if ($this->show_forgot_password === 'email_form') {
+                return $this->render_forgot_password_form();
+            } elseif ($this->show_forgot_password === 'reset_form') {
+                return $this->render_reset_password_form();
+            }
             return $this->render_wordpress_login();
         }
 
@@ -289,8 +463,8 @@ class LLM_Prompts_Frontend
                 </form>
                 
                 <div style="margin-top: 20px; font-size: 14px; color: #666;">
-                    <a href="<?php echo wp_lostpassword_url(get_permalink()); ?>" style="color: #2D2CFF; text-decoration: none;">
-                        Forgot your password?
+                    <a href="<?php echo home_url('/libreria-digitale-access-recovery/?llm_action=forgot'); ?>" style="color: #2D2CFF; text-decoration: none;">
+                        Hai dimenticato la password?
                     </a>
                 </div>
             </div>
@@ -308,6 +482,166 @@ class LLM_Prompts_Frontend
                 });
             </script>
         <?php endif; ?>
+        
+        <?php
+        return ob_get_clean();
+    }
+
+    private function render_forgot_password_form()
+    {
+        ob_start();
+        ?>
+        <div class="llm-login-container">
+            <div class="llm-login-form">
+                <h2>Reimposta Password</h2>
+                <p>Inserisci il tuo indirizzo email e ti invieremo un link per reimpostare la password.</p>
+                
+                <?php if (!empty($this->forgot_password_error)): ?>
+                    <div class="llm-error" style="margin-bottom: 20px; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; color: #c33;">
+                        <?php echo esc_html($this->forgot_password_error); ?>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if ($this->forgot_password_success): ?>
+                    <div class="llm-success" style="margin-bottom: 20px; padding: 12px; background: #efe; border: 1px solid #cfc; border-radius: 8px; color: #363;">
+                        Un link per reimpostare la password è stato inviato al tuo indirizzo email. Controlla la tua casella di posta e segui le istruzioni.
+                    </div>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <a href="<?php echo home_url('/libreria-digitale/'); ?>" style="color: #2D2CFF; text-decoration: none;">
+                            ← Torna al Login
+                        </a>
+                    </div>
+                <?php else: ?>
+                    <form method="post">
+                        <?php wp_nonce_field('llm_forgot_password', 'llm_forgot_password_nonce'); ?>
+                        
+                        <input type="email" 
+                               name="user_email" 
+                               placeholder="Indirizzo Email" 
+                               required
+                               value="<?php echo isset($_POST['user_email']) ? esc_attr($_POST['user_email']) : ''; ?>">
+                        
+                        <button type="submit" name="llm_forgot_password_submit">Invia Link di Reset</button>
+                    </form>
+                    
+                    <div style="margin-top: 20px; text-align: center; font-size: 14px; color: #666;">
+                        <a href="<?php echo home_url('/libreria-digitale/'); ?>" style="color: #2D2CFF; text-decoration: none;">
+                            ← Torna al Login
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        
+        <?php
+        return ob_get_clean();
+    }
+
+    private function render_reset_password_form()
+    {
+        $key = isset($_GET['llm_key']) ? sanitize_text_field($_GET['llm_key']) : '';
+        $login = isset($_GET['llm_user']) ? sanitize_text_field($_GET['llm_user']) : '';
+        
+        if (empty($key) || empty($login)) {
+            wp_redirect(home_url('/libreria-digitale/'));
+            exit;
+        }
+
+        ob_start();
+        ?>
+        <div class="llm-login-container">
+            <div class="llm-login-form">
+                <h2>Imposta Nuova Password</h2>
+                <p>Inserisci la tua nuova password qui sotto.</p>
+                
+                <?php if (!empty($this->forgot_password_error)): ?>
+                    <div class="llm-error" style="margin-bottom: 20px; padding: 12px; background: #fee; border: 1px solid #fcc; border-radius: 8px; color: #c33;">
+                        <?php echo esc_html($this->forgot_password_error); ?>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if ($this->forgot_password_success === 'password_reset'): ?>
+                    <div class="llm-success" style="margin-bottom: 20px; padding: 12px; background: #efe; border: 1px solid #cfc; border-radius: 8px; color: #363;">
+                        La tua password è stata reimpostata con successo! Sarai reindirizzato al login tra <span id="countdown">3</span> secondi...
+                    </div>
+                    <div style="margin-top: 20px; text-align: center;">
+                        <a href="https://cuadroacademy.com/libreria-digitale/" style="color: #2D2CFF; text-decoration: none; background: #2D2CFF; color: white; padding: 12px 24px; border-radius: 8px; display: inline-block;">
+                            Vai al Login Ora
+                        </a>
+                    </div>
+                    <script>
+                        let countdown = 3;
+                        const countdownEl = document.getElementById('countdown');
+                        const timer = setInterval(function() {
+                            countdown--;
+                            if (countdownEl) countdownEl.textContent = countdown;
+                            if (countdown <= 0) {
+                                clearInterval(timer);
+                                window.location.href = 'https://cuadroacademy.com/libreria-digitale/';
+                            }
+                        }, 1000);
+                    </script>
+                <?php else: ?>
+                    <form method="post">
+                        <?php wp_nonce_field('llm_reset_password', 'llm_reset_password_nonce'); ?>
+                        <input type="hidden" name="reset_key" value="<?php echo esc_attr($key); ?>">
+                        <input type="hidden" name="user_login" value="<?php echo esc_attr($login); ?>">
+                        
+                        <div class="llm-password-wrapper">
+                            <input type="password" 
+                                   name="new_password" 
+                                   id="new_password"
+                                   placeholder="Nuova Password" 
+                                   required
+                                   minlength="8">
+                            <span class="llm-password-toggle" onclick="togglePassword('new_password')">
+                                <svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                                    <circle cx="12" cy="12" r="2.5"/>
+                                </svg>
+                                <svg class="eye-closed" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="display: none;">
+                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                                    <circle cx="12" cy="12" r="2.5"/>
+                                    <line x1="4" y1="4" x2="20" y2="20"/>
+                                </svg>
+                            </span>
+                        </div>
+                        
+                        <div class="llm-password-wrapper">
+                            <input type="password" 
+                                   name="confirm_password" 
+                                   id="confirm_password"
+                                   placeholder="Conferma Nuova Password" 
+                                   required
+                                   minlength="8">
+                            <span class="llm-password-toggle" onclick="togglePassword('confirm_password')">
+                                <svg class="eye-open" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                                    <circle cx="12" cy="12" r="2.5"/>
+                                </svg>
+                                <svg class="eye-closed" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="display: none;">
+                                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                                    <circle cx="12" cy="12" r="2.5"/>
+                                    <line x1="4" y1="4" x2="20" y2="20"/>
+                                </svg>
+                            </span>
+                        </div>
+                        
+                        <div style="margin-bottom: 15px; font-size: 13px; color: #666;">
+                            La password deve essere di almeno 8 caratteri
+                        </div>
+                        
+                        <button type="submit" name="llm_reset_password_submit">Reimposta Password</button>
+                    </form>
+                    
+                    <div style="margin-top: 20px; text-align: center; font-size: 14px; color: #666;">
+                        <a href="<?php echo home_url('/libreria-digitale/'); ?>" style="color: #2D2CFF; text-decoration: none;">
+                            ← Torna al Login
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
         
         <?php
         return ob_get_clean();
@@ -1129,7 +1463,7 @@ class LLM_Prompts_Frontend
                             <?php echo esc_html($short_description ?: wp_trim_words(get_the_content(), 20)); ?>
                         </p>
                     </div>
-                    <a href="<?php echo esc_url(get_permalink()); ?>" class="arrow-button">
+                    <a href="<?php echo esc_url(home_url('/libreria-digitale/')); ?>" class="arrow-button">
                         <div class="arrow-icon">
                             <img src="<?php echo esc_url($arrow_icon); ?>" alt="">
                         </div>
@@ -1141,5 +1475,31 @@ class LLM_Prompts_Frontend
         <?php
         wp_reset_postdata();
         return ob_get_clean();
+    }
+
+    public function password_reset_shortcode($atts)
+    {
+        // Process forgot password form if submitted
+        $this->handle_forgot_password();
+
+        wp_enqueue_style('llm-prompts-style', LLM_PROMPTS_URL . 'assets/style.css', array(), '1.0.19');
+        wp_enqueue_script('llm-prompts-script', LLM_PROMPTS_URL . 'assets/script.js', array('jquery'), '1.0.19', true);
+
+        // Check URL parameters to determine form type (only if no form was submitted)
+        if ($this->show_forgot_password === false) {
+            if (isset($_GET['llm_action']) && $_GET['llm_action'] === 'reset' && 
+                isset($_GET['llm_key']) && isset($_GET['llm_user'])) {
+                $this->show_forgot_password = 'reset_form';
+            } elseif (isset($_GET['llm_action']) && $_GET['llm_action'] === 'forgot') {
+                $this->show_forgot_password = 'email_form';
+            }
+        }
+
+        // Check what form to show
+        if ($this->show_forgot_password === 'reset_form') {
+            return $this->render_reset_password_form();
+        } else {
+            return $this->render_forgot_password_form();
+        }
     }
 }

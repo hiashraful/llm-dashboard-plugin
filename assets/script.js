@@ -412,10 +412,20 @@ jQuery(document).ready(function($) {
     };
 
     // Global password toggle function
-    window.togglePassword = function() {
-        const passwordInput = document.getElementById('user_password');
-        const eyeOpen = document.querySelector('.eye-open');
-        const eyeClosed = document.querySelector('.eye-closed');
+    window.togglePassword = function(fieldId) {
+        const passwordInput = fieldId ? document.getElementById(fieldId) : document.getElementById('user_password');
+        
+        if (!passwordInput) return;
+        
+        // Find the toggle button that was clicked by looking at the parent wrapper
+        const wrapper = passwordInput.closest('.llm-password-wrapper');
+        if (!wrapper) return;
+        
+        const toggle = wrapper.querySelector('.llm-password-toggle');
+        if (!toggle) return;
+        
+        const eyeOpen = toggle.querySelector('.eye-open');
+        const eyeClosed = toggle.querySelector('.eye-closed');
         
         if (passwordInput && eyeOpen && eyeClosed) {
             if (passwordInput.type === 'password') {

@@ -3,7 +3,7 @@
  * Plugin Name: LIBRERIA DIGITALE
  * Plugin URI: https://www.devash.pro/
  * Description: A library of ready-to-use prompts for ChatGPT and other LLMs
- * Version: 2.0.7
+ * Version: 2.3.6
  * Author: Dev Ash
  * Author URI: https://www.devash.pro/
  */
@@ -28,13 +28,19 @@ class LLM_Prompts_Plugin
         add_filter('template_include', array($this, 'load_account_template'));
         add_action('user_register', array($this, 'handle_new_user_registration'));
         add_action('set_user_role', array($this, 'handle_user_role_change'), 10, 3);
+        add_action('profile_update', array($this, 'handle_user_meta_update'), 10, 1);
+        add_action('updated_user_meta', array($this, 'handle_specific_meta_update'), 10, 4);
         add_action('rest_api_init', array($this, 'register_api_endpoints'));
         add_action('wp', array($this, 'hide_admin_bar_on_dashboard_pages'));
         add_action('init', array($this, 'add_rewrite_rules'));
         add_action('parse_request', array($this, 'parse_custom_urls'));
         add_filter('post_type_link', array($this, 'custom_prompt_permalink'), 10, 2);
         add_action('template_redirect', array($this, 'redirect_old_urls'));
+        add_action('llm_special_offer_assigned', array($this, 'invalidate_seats_cache'));
         register_activation_hook(__FILE__, array($this, 'activate'));
+        
+        // Force flush rewrite rules if needed
+        add_action('init', array($this, 'maybe_flush_rewrite_rules'));
     }
 
     public function init()
@@ -175,6 +181,17 @@ class LLM_Prompts_Plugin
                 'post_content' => ''
             ));
         }
+        
+        // Create access recovery page
+        if (!get_page_by_path('libreria-digitale-access-recovery')) {
+            wp_insert_post(array(
+                'post_title' => 'Libreria Digitale - Recupero Accesso',
+                'post_name' => 'libreria-digitale-access-recovery',
+                'post_status' => 'publish',
+                'post_type' => 'page',
+                'post_content' => '[llm_password_reset]'
+            ));
+        }
     }
 
     public function load_single_template($template)
@@ -226,6 +243,24 @@ class LLM_Prompts_Plugin
         }
     }
 
+    public function handle_user_meta_update($user_id)
+    {
+        // Check if user has academy_student role and might be eligible
+        $user = get_userdata($user_id);
+        if ($user && user_can($user, 'academy_student')) {
+            // Also invalidate cache in case special offer status changed manually
+            $this->invalidate_seats_cache($user_id);
+        }
+    }
+
+    public function handle_specific_meta_update($meta_id, $user_id, $meta_key, $meta_value)
+    {
+        // Only invalidate cache if the special offer student meta is being updated
+        if ($meta_key === '_llm_special_offer_student' || $meta_key === 'registration_source') {
+            $this->invalidate_seats_cache($user_id);
+        }
+    }
+
     private function check_special_offer_eligibility($user_id)
     {
         $offer_status = get_option('llm_special_offer_status', 'inactive');
@@ -274,6 +309,58 @@ class LLM_Prompts_Plugin
         update_user_meta($user_id, '_llm_special_offer_date', current_time('mysql'));
 
         do_action('llm_special_offer_assigned', $user_id);
+    }
+
+    public function invalidate_seats_cache($user_id = null)
+    {
+        // Clear WordPress object cache
+        wp_cache_delete('llm_seats_remaining', 'llm_api');
+        
+        // Clear any transients related to seats remaining
+        delete_transient('llm_seats_remaining');
+        delete_transient('llm_seats_remaining_count');
+        
+        // LiteSpeed Cache specific invalidation
+        if (function_exists('litespeed_purge_all')) {
+            litespeed_purge_all();
+        }
+        
+        // Alternative LiteSpeed Cache invalidation methods
+        if (class_exists('LiteSpeed\Purge')) {
+            do_action('litespeed_purge_all');
+        }
+        
+        // Generic cache invalidation for other caching plugins
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_flush();
+        }
+        
+        // WP Rocket cache invalidation
+        if (function_exists('rocket_clean_domain')) {
+            rocket_clean_domain();
+        }
+        
+        // W3 Total Cache invalidation
+        if (function_exists('w3tc_flush_all')) {
+            w3tc_flush_all();
+        }
+        
+        // WP Super Cache invalidation
+        if (function_exists('wp_cache_clear_cache')) {
+            wp_cache_clear_cache();
+        }
+        
+        // Specifically target the REST API endpoint cache
+        $rest_url = rest_url('llm/v1/seats-remaining');
+        if (function_exists('litespeed_purge_single_post')) {
+            // Try to purge the specific API endpoint
+            do_action('litespeed_purge_url', $rest_url);
+        }
+        
+        // Log cache invalidation for debugging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('LLM Dashboard: Cache invalidated for seats-remaining API after special student assignment. User ID: ' . ($user_id ?: 'unknown'));
+        }
     }
 
     public static function is_special_offer_student($user_id)
@@ -366,6 +453,16 @@ class LLM_Prompts_Plugin
         );
         
         $response = rest_ensure_response($response);
+        
+        // Add cache control headers to prevent aggressive caching
+        $response->header('Cache-Control', 'no-cache, must-revalidate, max-age=0');
+        $response->header('Pragma', 'no-cache');
+        $response->header('Expires', 'Wed, 11 Jan 1984 05:00:00 GMT');
+        
+        // Add ETag for better cache validation
+        $etag = md5(json_encode($response->get_data()));
+        $response->header('ETag', '"' . $etag . '"');
+        
         return $response;
     }
 
@@ -425,8 +522,16 @@ class LLM_Prompts_Plugin
 
     public function add_rewrite_rules()
     {
+        // Add access recovery rewrite rules FIRST with highest priority
+        add_rewrite_rule('^libreria-digitale-access-recovery/?$', 'index.php?pagename=libreria-digitale-access-recovery', 'top');
+        
         add_rewrite_tag('%library_slug%', '([^&]+)');
         add_rewrite_tag('%prompt_slug%', '([^&]+)');
+        add_rewrite_tag('%llm_forgot_password%', '([0-9]+)');
+        add_rewrite_tag('%llm_reset_password%', '([0-9]+)');
+        add_rewrite_tag('%llm_key%', '([^&]+)');
+        add_rewrite_tag('%llm_login%', '([^&]+)');
+        
         add_rewrite_rule('^([^/]+)/([^/]+)/?$', 'index.php?library_slug=$matches[1]&prompt_slug=$matches[2]', 'top');
     }
 
@@ -497,6 +602,15 @@ class LLM_Prompts_Plugin
                     exit;
                 }
             }
+        }
+    }
+
+    public function maybe_flush_rewrite_rules()
+    {
+        // Check if we need to flush rewrite rules (force flush for updated rules)
+        if (get_option('llm_forgot_password_rules_flushed') !== '3') {
+            flush_rewrite_rules();
+            update_option('llm_forgot_password_rules_flushed', '3');
         }
     }
 }
